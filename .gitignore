@@ -8,6 +8,7 @@ bin/
 
 # Test
 *.test
+!Dockerfile.test
 *.out
 coverage.html
 
