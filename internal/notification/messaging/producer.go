@@ -117,3 +117,52 @@ func (p *notificationProducer) PublishBatch(ctx context.Context, notifications [
 	}
 	return nil
 }
+
+// PublishToRetry publishes a notification to the retry exchange with the updated retry count.
+func (p *notificationProducer) PublishToRetry(ctx context.Context, n *domain.Notification, retryCount int32) error {
+	ctx, span := otel.Tracer("notification-hub").Start(ctx, "producer.PublishToRetry")
+	defer span.End()
+
+	payload := messagePayload{
+		ID:        n.ID.String(),
+		Recipient: n.Recipient,
+		Channel:   string(n.Channel),
+		Content:   n.Content,
+		Priority:  string(n.Priority),
+	}
+
+	body, err := json.Marshal(payload)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "marshal failed")
+		return fmt.Errorf("failed to marshal notification %s: %w", n.ID, err)
+	}
+
+	headers := amqp.Table{
+		"x-retry-count": retryCount,
+	}
+
+	otel.GetTextMapPropagator().Inject(ctx, amqpHeaderCarrier(headers))
+
+	err = p.channel.PublishWithContext(ctx,
+		"notification.retry.exchange",
+		string(n.Channel),
+		false,
+		false,
+		amqp.Publishing{
+			ContentType:  "application/json",
+			DeliveryMode: amqp.Persistent,
+			Priority:     n.Priority.ToUint8(),
+			MessageId:    n.ID.String(),
+			Body:         body,
+			Headers:      headers,
+		},
+	)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "publish to retry failed")
+		return fmt.Errorf("failed to publish notification %s to retry: %w", n.ID, err)
+	}
+
+	return nil
+}

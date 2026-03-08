@@ -130,6 +130,11 @@ func (m *mockNotificationProducer) PublishBatch(ctx context.Context, notificatio
 	return args.Error(0)
 }
 
+func (m *mockNotificationProducer) PublishToRetry(ctx context.Context, n *domain.Notification, retryCount int32) error {
+	args := m.Called(ctx, n, retryCount)
+	return args.Error(0)
+}
+
 // --- Helpers ---
 
 func setupTestApp(svc *mockNotificationService, prod *mockNotificationProducer) *fiber.App {

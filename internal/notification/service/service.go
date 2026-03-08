@@ -33,6 +33,7 @@ type NotificationService interface {
 type NotificationProducer interface {
 	Publish(ctx context.Context, n *domain.Notification) error
 	PublishBatch(ctx context.Context, notifications []*domain.Notification) error
+	PublishToRetry(ctx context.Context, n *domain.Notification, retryCount int32) error
 }
 
 type notificationService struct {
