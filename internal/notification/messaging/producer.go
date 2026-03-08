@@ -10,16 +10,17 @@ import (
 	"go.opentelemetry.io/otel/codes"
 
 	"github.com/baris/notification-hub/internal/notification/domain"
+	"github.com/baris/notification-hub/internal/notification/service"
 )
 
 type notificationProducer struct {
 	channel *amqp.Channel
 }
 
-var _ domain.NotificationProducer = (*notificationProducer)(nil)
+var _ service.NotificationProducer = (*notificationProducer)(nil)
 
 // NewNotificationProducer creates a new producer that publishes to the notification exchange.
-func NewNotificationProducer(ch *amqp.Channel) domain.NotificationProducer {
+func NewNotificationProducer(ch *amqp.Channel) *notificationProducer {
 	return &notificationProducer{channel: ch}
 }
 

@@ -154,7 +154,7 @@ func (m *mockNotificationProducer) PublishBatch(ctx context.Context, notificatio
 
 // --- Tests ---
 
-func newTestService(repo *mockNotificationRepository, tmplSvc *mockTemplateService, prod *mockNotificationProducer) domain.NotificationService {
+func newTestService(repo *mockNotificationRepository, tmplSvc *mockTemplateService, prod *mockNotificationProducer) NotificationService {
 	return NewNotificationService(repo, tmplSvc, prod)
 }
 

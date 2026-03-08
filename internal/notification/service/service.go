@@ -6,21 +6,45 @@ import (
 	"time"
 
 	"github.com/baris/notification-hub/internal/notification/domain"
+	"github.com/baris/notification-hub/internal/notification/repository"
 	"github.com/baris/notification-hub/internal/notificationtemplate"
 	"github.com/baris/notification-hub/pkg/logger"
 	"github.com/google/uuid"
 )
 
-type notificationService struct {
-	repo            domain.NotificationRepository
-	templateService notificationtemplate.NotificationTemplateService
-	producer        domain.NotificationProducer
+// NotificationService defines the business logic interface for notifications.
+type NotificationService interface {
+	Create(ctx context.Context, req domain.NotificationCreateRequest, idempotencyKey *string) (*domain.Notification, error)
+	CreateBatch(ctx context.Context, req domain.NotificationBatchCreateRequest) ([]*domain.Notification, uuid.UUID, error)
+	GetByID(ctx context.Context, id uuid.UUID) (*domain.Notification, error)
+	GetByBatchID(ctx context.Context, batchID uuid.UUID) ([]*domain.Notification, error)
+	List(ctx context.Context, filter domain.NotificationListFilter) ([]*domain.Notification, int64, error)
+	Cancel(ctx context.Context, id uuid.UUID) (*domain.Notification, error)
+	MarkAsProcessing(ctx context.Context, id uuid.UUID) (*domain.Notification, error)
+	MarkAsSent(ctx context.Context, id uuid.UUID, providerMsgID string) error
+	MarkAsFailed(ctx context.Context, id uuid.UUID, reason string, retryCount int) error
+	MarkAsQueued(ctx context.Context, id uuid.UUID) error
+	MarkAsRetrying(ctx context.Context, id uuid.UUID) error
+	RecoverStuckNotifications(ctx context.Context) error
+	PublishDueScheduled(ctx context.Context) error
 }
 
-var _ domain.NotificationService = (*notificationService)(nil)
+// NotificationProducer publishes notifications to message queues.
+type NotificationProducer interface {
+	Publish(ctx context.Context, n *domain.Notification) error
+	PublishBatch(ctx context.Context, notifications []*domain.Notification) error
+}
+
+type notificationService struct {
+	repo            repository.NotificationRepository
+	templateService notificationtemplate.NotificationTemplateService
+	producer        NotificationProducer
+}
+
+var _ NotificationService = (*notificationService)(nil)
 
 // NewNotificationService creates a new NotificationService.
-func NewNotificationService(repo domain.NotificationRepository, templateSvc notificationtemplate.NotificationTemplateService, producer domain.NotificationProducer) domain.NotificationService {
+func NewNotificationService(repo repository.NotificationRepository, templateSvc notificationtemplate.NotificationTemplateService, producer NotificationProducer) *notificationService {
 	return &notificationService{
 		repo:            repo,
 		templateService: templateSvc,

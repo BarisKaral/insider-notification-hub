@@ -7,12 +7,16 @@ import (
 
 	"github.com/gofiber/websocket/v2"
 
-	"github.com/baris/notification-hub/internal/notification/domain"
 	"github.com/baris/notification-hub/pkg/logger"
 )
 
+// StatusBroadcaster broadcasts notification status changes (implemented by WebSocket hub).
+type StatusBroadcaster interface {
+	Broadcast(notificationID string, batchID *string, status string)
+}
+
 // Compile-time check: NotificationHub must implement StatusBroadcaster.
-var _ domain.StatusBroadcaster = (*NotificationHub)(nil)
+var _ StatusBroadcaster = (*NotificationHub)(nil)
 
 // NotificationHub is the in-memory WebSocket hub for real-time notification status updates.
 type NotificationHub struct {

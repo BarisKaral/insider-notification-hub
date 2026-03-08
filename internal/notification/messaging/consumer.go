@@ -15,6 +15,8 @@ import (
 
 	"github.com/baris/notification-hub/internal/notification/domain"
 	"github.com/baris/notification-hub/internal/notification/metrics"
+	"github.com/baris/notification-hub/internal/notification/service"
+	"github.com/baris/notification-hub/internal/notification/ws"
 	"github.com/baris/notification-hub/internal/provider"
 	"github.com/baris/notification-hub/pkg/logger"
 )
@@ -34,10 +36,10 @@ type NotificationConsumerConfig struct {
 }
 
 type notificationConsumer struct {
-	service  domain.NotificationService
+	service  service.NotificationService
 	provider provider.ProviderClient
 	channel  *amqp.Channel
-	wsHub    domain.StatusBroadcaster
+	wsHub    ws.StatusBroadcaster
 	metrics  *metrics.NotificationMetrics
 	config   NotificationConsumerConfig
 }
@@ -55,15 +57,15 @@ type consumerPayload struct {
 
 // NewNotificationConsumer creates a new consumer that processes notifications from RabbitMQ.
 func NewNotificationConsumer(
-	service domain.NotificationService,
+	svc service.NotificationService,
 	prov provider.ProviderClient,
 	ch *amqp.Channel,
-	wsHub domain.StatusBroadcaster,
+	wsHub ws.StatusBroadcaster,
 	m *metrics.NotificationMetrics,
 	cfg NotificationConsumerConfig,
 ) NotificationConsumer {
 	return &notificationConsumer{
-		service:  service,
+		service:  svc,
 		provider: prov,
 		channel:  ch,
 		wsHub:    wsHub,

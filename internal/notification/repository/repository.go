@@ -13,13 +13,27 @@ import (
 	"github.com/baris/notification-hub/internal/notification/domain"
 )
 
+// NotificationRepository defines the data access interface for notifications.
+type NotificationRepository interface {
+	Create(ctx context.Context, n *domain.Notification) error
+	CreateBatch(ctx context.Context, notifications []*domain.Notification) error
+	GetByID(ctx context.Context, id uuid.UUID) (*domain.Notification, error)
+	GetByBatchID(ctx context.Context, batchID uuid.UUID) ([]*domain.Notification, error)
+	List(ctx context.Context, filter domain.NotificationListFilter) ([]*domain.Notification, int64, error)
+	Update(ctx context.Context, n *domain.Notification) error
+	GetByIdempotencyKey(ctx context.Context, key string) (*domain.Notification, error)
+	GetForProcessing(ctx context.Context, id uuid.UUID) (*domain.Notification, error)
+	GetRecoverableNotifications(ctx context.Context, staleDuration time.Duration) ([]*domain.Notification, error)
+	GetDueScheduledNotifications(ctx context.Context) ([]*domain.Notification, error)
+}
+
 type repository struct {
 	db *gorm.DB
 }
 
-var _ domain.NotificationRepository = (*repository)(nil)
+var _ NotificationRepository = (*repository)(nil)
 
-func NewNotificationRepository(db *gorm.DB) domain.NotificationRepository {
+func NewNotificationRepository(db *gorm.DB) *repository {
 	return &repository{db: db}
 }
 

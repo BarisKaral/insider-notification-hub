@@ -10,7 +10,6 @@ import (
 
 	"github.com/baris/notification-hub/config"
 	"github.com/baris/notification-hub/internal/notification/controller"
-	"github.com/baris/notification-hub/internal/notification/domain"
 	"github.com/baris/notification-hub/internal/notification/messaging"
 	"github.com/baris/notification-hub/internal/notification/metrics"
 	"github.com/baris/notification-hub/internal/notification/repository"
@@ -31,9 +30,9 @@ type Container struct {
 	RabbitMQ rabbitmq.RabbitMQConnection
 
 	// Notification domain
-	NotificationRepo       domain.NotificationRepository
-	NotificationService    domain.NotificationService
-	NotificationProducer   domain.NotificationProducer
+	NotificationRepo       repository.NotificationRepository
+	NotificationService    service.NotificationService
+	NotificationProducer   service.NotificationProducer
 	NotificationConsumer   messaging.NotificationConsumer
 	NotificationController controller.NotificationController
 	NotificationMetrics    *metrics.NotificationMetrics

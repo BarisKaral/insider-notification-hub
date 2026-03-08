@@ -12,6 +12,7 @@ import (
 	"go.opentelemetry.io/otel/codes"
 
 	"github.com/baris/notification-hub/internal/notification/domain"
+	"github.com/baris/notification-hub/internal/notification/service"
 	"github.com/baris/notification-hub/pkg/errs"
 	"github.com/baris/notification-hub/pkg/logger"
 	"github.com/baris/notification-hub/pkg/response"
@@ -29,16 +30,16 @@ type NotificationController interface {
 }
 
 type notificationController struct {
-	service  domain.NotificationService
-	producer domain.NotificationProducer
+	service  service.NotificationService
+	producer service.NotificationProducer
 }
 
 var _ NotificationController = (*notificationController)(nil)
 
 // NewNotificationController creates a new NotificationController.
-func NewNotificationController(service domain.NotificationService, producer domain.NotificationProducer) NotificationController {
+func NewNotificationController(svc service.NotificationService, producer service.NotificationProducer) NotificationController {
 	return &notificationController{
-		service:  service,
+		service:  svc,
 		producer: producer,
 	}
 }

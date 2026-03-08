@@ -12,7 +12,7 @@ import (
 
 func TestRepositoryInterfaceCompliance(t *testing.T) {
 	// Compile-time check: repository implements NotificationRepository
-	var _ domain.NotificationRepository = (*repository)(nil)
+	var _ NotificationRepository = (*repository)(nil)
 }
 
 func TestIsUniqueViolation(t *testing.T) {
