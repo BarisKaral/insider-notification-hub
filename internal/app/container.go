@@ -10,7 +10,7 @@ import (
 
 	"github.com/baris/notification-hub/config"
 	"github.com/baris/notification-hub/internal/notification"
-	"github.com/baris/notification-hub/internal/notification/template"
+	"github.com/baris/notification-hub/internal/notificationtemplate"
 	"github.com/baris/notification-hub/internal/provider"
 	"github.com/baris/notification-hub/pkg/health"
 	"github.com/baris/notification-hub/pkg/logger"
@@ -33,9 +33,9 @@ type Container struct {
 	NotificationMetrics  *notification.NotificationMetrics
 
 	// Template domain
-	TemplateRepo    template.TemplateRepository
-	TemplateService template.TemplateService
-	TemplateHandler template.TemplateHandler
+	TemplateRepo    notificationtemplate.NotificationTemplateRepository
+	TemplateService notificationtemplate.NotificationTemplateService
+	TemplateHandler notificationtemplate.NotificationTemplateHandler
 
 	// Infrastructure
 	ProviderClient provider.ProviderClient
@@ -97,7 +97,7 @@ func NewContainer(cfg *config.Config) (*Container, error) {
 
 	// 6. Repositories
 	c.NotificationRepo = notification.NewNotificationRepository(db)
-	c.TemplateRepo = template.NewTemplateRepository(db)
+	c.TemplateRepo = notificationtemplate.NewNotificationTemplateRepository(db)
 
 	// 7. Producer (needs AMQP channel)
 	producerCh, err := rmqConn.Channel()
@@ -107,7 +107,7 @@ func NewContainer(cfg *config.Config) (*Container, error) {
 	c.NotificationProducer = notification.NewNotificationProducer(producerCh)
 
 	// 8. Services
-	c.TemplateService = template.NewTemplateService(c.TemplateRepo)
+	c.TemplateService = notificationtemplate.NewNotificationTemplateService(c.TemplateRepo)
 	c.NotificationService = notification.NewNotificationService(c.NotificationRepo, c.TemplateService, c.NotificationProducer)
 
 	// 9. WebSocket Hub
@@ -138,7 +138,7 @@ func NewContainer(cfg *config.Config) (*Container, error) {
 
 	// 12. Handlers
 	c.NotificationHandler = notification.NewNotificationHandler(c.NotificationService, c.NotificationProducer)
-	c.TemplateHandler = template.NewTemplateHandler(c.TemplateService)
+	c.TemplateHandler = notificationtemplate.NewNotificationTemplateHandler(c.TemplateService)
 
 	// 13. Health check
 	c.HealthService = health.NewHealthService(db, rmqConn)

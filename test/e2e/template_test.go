@@ -45,7 +45,7 @@ func TestGetTemplateByID(t *testing.T) {
 	require.NotEmpty(t, created.ID)
 
 	// GET the template by ID.
-	resp, err := makeRequest(http.MethodGet, "/api/v1/templates/"+created.ID, nil)
+	resp, err := makeRequest(http.MethodGet, "/api/v1/notification-templates/"+created.ID, nil)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 
@@ -73,7 +73,7 @@ func TestListTemplates(t *testing.T) {
 		require.True(t, apiResp.Success)
 	}
 
-	resp, err := makeRequest(http.MethodGet, "/api/v1/templates?limit=20&offset=0", nil)
+	resp, err := makeRequest(http.MethodGet, "/api/v1/notification-templates?limit=20&offset=0", nil)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 
@@ -109,7 +109,7 @@ func TestUpdateTemplate(t *testing.T) {
 		"channel": "email",
 		"content": "Updated content for {{user}}",
 	}
-	resp, err := makeRequest(http.MethodPut, "/api/v1/templates/"+created.ID, updateBody)
+	resp, err := makeRequest(http.MethodPut, "/api/v1/notification-templates/"+created.ID, updateBody)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 
@@ -127,7 +127,7 @@ func TestUpdateTemplate(t *testing.T) {
 	assert.Equal(t, "Updated content for {{user}}", updated.Content)
 
 	// GET again to verify changes persisted.
-	resp, err = makeRequest(http.MethodGet, "/api/v1/templates/"+created.ID, nil)
+	resp, err = makeRequest(http.MethodGet, "/api/v1/notification-templates/"+created.ID, nil)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 
@@ -156,13 +156,13 @@ func TestDeleteTemplate(t *testing.T) {
 	require.NotEmpty(t, created.ID)
 
 	// DELETE the template.
-	resp, err := makeRequest(http.MethodDelete, "/api/v1/templates/"+created.ID, nil)
+	resp, err := makeRequest(http.MethodDelete, "/api/v1/notification-templates/"+created.ID, nil)
 	require.NoError(t, err)
 	assert.Equal(t, http.StatusNoContent, resp.StatusCode)
 	resp.Body.Close()
 
 	// GET again — should return 404.
-	resp, err = makeRequest(http.MethodGet, "/api/v1/templates/"+created.ID, nil)
+	resp, err = makeRequest(http.MethodGet, "/api/v1/notification-templates/"+created.ID, nil)
 	require.NoError(t, err)
 	assert.Equal(t, http.StatusNotFound, resp.StatusCode)
 	resp.Body.Close()

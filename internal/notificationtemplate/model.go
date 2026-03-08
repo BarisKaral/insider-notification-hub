@@ -1,4 +1,4 @@
-package template
+package notificationtemplate
 
 import (
 	"time"
@@ -7,7 +7,7 @@ import (
 	"gorm.io/gorm"
 )
 
-type Template struct {
+type NotificationTemplate struct {
 	ID        uuid.UUID      `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
 	Name      string         `gorm:"type:varchar(255);uniqueIndex;not null" json:"name"`
 	Channel   string         `gorm:"type:varchar(10);not null" json:"channel"`
@@ -17,4 +17,4 @@ type Template struct {
 	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
 }
 
-func (Template) TableName() string { return "templates" }
+func (NotificationTemplate) TableName() string { return "templates" }

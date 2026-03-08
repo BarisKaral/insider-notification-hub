@@ -222,7 +222,7 @@ func createTemplate(t *testing.T, name, channel, content string) (*http.Response
 		"channel": channel,
 		"content": content,
 	}
-	resp, err := makeRequest(http.MethodPost, "/api/v1/templates", body)
+	resp, err := makeRequest(http.MethodPost, "/api/v1/notification-templates", body)
 	require.NoError(t, err, "failed to send create template request")
 	apiResp, err := parseAPIResponse(resp)
 	require.NoError(t, err, "failed to parse create template response")

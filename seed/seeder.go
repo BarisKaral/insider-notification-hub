@@ -10,7 +10,7 @@ import (
 
 	"github.com/baris/notification-hub/config"
 	"github.com/baris/notification-hub/internal/notification"
-	"github.com/baris/notification-hub/internal/notification/template"
+	"github.com/baris/notification-hub/internal/notificationtemplate"
 	"github.com/baris/notification-hub/pkg/postgres"
 )
 
@@ -34,7 +34,7 @@ func main() {
 
 	// Clean up existing seed data (soft-deleted or not) to make seeder idempotent.
 	db.Unscoped().Where("recipient LIKE ?", "seed-%").Delete(&notification.Notification{})
-	db.Unscoped().Where("name LIKE ?", "seed-%").Delete(&template.Template{})
+	db.Unscoped().Where("name LIKE ?", "seed-%").Delete(&notificationtemplate.NotificationTemplate{})
 
 	log.Println("Cleaned up existing seed data")
 
@@ -44,7 +44,7 @@ func main() {
 	emailTemplateID := uuid.New()
 	pushTemplateID := uuid.New()
 
-	templates := []template.Template{
+	templates := []notificationtemplate.NotificationTemplate{
 		{
 			ID:      smsTemplateID,
 			Name:    "seed-sms-verification",

@@ -1,4 +1,4 @@
-package template
+package notificationtemplate
 
 import (
 	"net/http"
@@ -7,17 +7,17 @@ import (
 )
 
 var (
-	ErrTemplateNotFound = errs.NewAppError(
+	ErrNotificationTemplateNotFound = errs.NewAppError(
 		"TEMPLATE_NOT_FOUND",
 		"template not found",
 		http.StatusNotFound,
 	)
-	ErrTemplateNameExists = errs.NewAppError(
+	ErrNotificationTemplateNameExists = errs.NewAppError(
 		"TEMPLATE_NAME_EXISTS",
 		"a template with this name already exists",
 		http.StatusConflict,
 	)
-	ErrTemplateCreateFailed = errs.NewAppError(
+	ErrNotificationTemplateCreateFailed = errs.NewAppError(
 		"TEMPLATE_CREATE_FAILED",
 		"failed to create template",
 		http.StatusInternalServerError,

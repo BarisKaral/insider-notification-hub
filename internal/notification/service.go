@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/baris/notification-hub/internal/notification/template"
+	"github.com/baris/notification-hub/internal/notificationtemplate"
 	"github.com/baris/notification-hub/pkg/logger"
 	"github.com/google/uuid"
 )
@@ -29,14 +29,14 @@ type NotificationService interface {
 
 type notificationService struct {
 	repo            NotificationRepository
-	templateService template.TemplateService
+	templateService notificationtemplate.NotificationTemplateService
 	producer        NotificationProducer
 }
 
 var _ NotificationService = (*notificationService)(nil)
 
 // NewNotificationService creates a new NotificationService.
-func NewNotificationService(repo NotificationRepository, templateSvc template.TemplateService, producer NotificationProducer) NotificationService {
+func NewNotificationService(repo NotificationRepository, templateSvc notificationtemplate.NotificationTemplateService, producer NotificationProducer) NotificationService {
 	return &notificationService{
 		repo:            repo,
 		templateService: templateSvc,
