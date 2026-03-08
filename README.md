@@ -85,35 +85,28 @@ Runs every 30 seconds to handle:
 
 ### Run
 
-`.env` is included in the repository with Docker-ready defaults. Before starting, get a unique webhook URL from https://webhook.site and update it in `.env`:
-
-```env
-PROVIDER_URL=https://webhook.site/<your-uuid>
-```
-
 ```bash
+# Build all images
+make install
+
 # Start all services
-docker-compose up -d
+make up
+
+# Stop all services
+make down
 ```
+
+No external dependencies — a built-in fake webhook server handles provider callbacks. Database migrations run automatically on first start.
 
 This starts:
 - **App** at `http://localhost:8080`
+- **Fake Webhook** at `http://localhost:8081` (provider mock)
 - **PostgreSQL** at `localhost:5432`
 - **RabbitMQ** at `localhost:5672` (Management UI: `http://localhost:15672`)
 - **Prometheus** at `http://localhost:9090`
 - **Grafana** at `http://localhost:3000` (admin/admin)
 - **Jaeger** at `http://localhost:16686`
 - **pgAdmin** at `http://localhost:5050` (desktop mode, no login required)
-
-### Run Locally (development)
-
-```bash
-# Start dependencies only
-docker-compose up -d postgres rabbitmq prometheus grafana jaeger
-
-# Run the app
-make run
-```
 
 ## API Examples
 
@@ -275,7 +268,7 @@ Server sends status updates:
 | `DB_NAME` | `notificationdb` | PostgreSQL database name |
 | `DB_SSL_MODE` | `disable` | PostgreSQL SSL mode |
 | `RABBITMQ_URL` | `amqp://guest:guest@localhost:5672/` | RabbitMQ connection URL |
-| `PROVIDER_URL` | - | Webhook provider URL |
+| `PROVIDER_URL` | `http://fakewebhook:8081` | Webhook provider URL |
 | `PROVIDER_AUTH_KEY` | - | Provider authentication key |
 | `PROVIDER_TIMEOUT` | `10s` | Provider HTTP timeout |
 | `PROVIDER_MAX_RETRIES` | `3` | Max delivery retries |
@@ -289,14 +282,14 @@ Server sends status updates:
 ## Testing
 
 ```bash
-# Unit tests
+# Unit tests (Docker)
 make test
-
-# Unit tests with coverage
-make test-coverage
 
 # E2E tests (requires running services)
 make test-e2e
+
+# Lint
+make lint
 ```
 
 ## Monitoring
@@ -321,6 +314,7 @@ make test-e2e
 ```
 notification-hub/
 ├── cmd/api/main.go                          # Entry point (HTTP + Workers)
+├── cmd/fakewebhook/main.go                  # Fake provider webhook server
 ├── config/
 │   ├── config.go                            # Env parsing & validation
 │   └── errors.go

@@ -1,22 +1,17 @@
-.PHONY: build run test test-e2e test-coverage lint swagger migrate-up migrate-down seed docker-up docker-down clean
+.PHONY: install up down test test-e2e lint swagger seed
 
-build:
-	go build -o bin/notification-hub cmd/api/main.go
+install:
+	docker-compose build
 
-run:
-	go run cmd/api/main.go
+up:
+	docker-compose up -d
 
-migrate-up:
-	migrate -path migrations -database "postgres://$(DB_USER):$(DB_PASSWORD)@$(DB_HOST):$(DB_PORT)/$(DB_NAME)?sslmode=$(DB_SSL_MODE)" up
-
-migrate-down:
-	migrate -path migrations -database "postgres://$(DB_USER):$(DB_PASSWORD)@$(DB_HOST):$(DB_PORT)/$(DB_NAME)?sslmode=$(DB_SSL_MODE)" down
-
-seed:
-	go run seed/seeder.go
+down:
+	docker-compose down
 
 test:
-	go test ./... -v -short
+	docker build -t notification-hub-test -f Dockerfile.test .
+	docker run --rm notification-hub-test
 
 test-e2e:
 	docker-compose up -d
@@ -24,21 +19,11 @@ test-e2e:
 	@sleep 10
 	go test ./test/e2e/... -v -tags=e2e -timeout 120s
 
-test-coverage:
-	go test ./... -cover -short -coverprofile=coverage.out
-	go tool cover -html=coverage.out -o coverage.html
+lint:
+	golangci-lint run
 
 swagger:
 	swag init -g cmd/api/main.go -o docs
 
-lint:
-	golangci-lint run
-
-docker-up:
-	docker-compose up -d
-
-docker-down:
-	docker-compose down
-
-clean:
-	rm -rf bin/ coverage.out coverage.html
+seed:
+	go run seed/seeder.go
