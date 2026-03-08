@@ -38,6 +38,7 @@ type notificationConsumer struct {
 	provider provider.ProviderClient
 	channel  *amqp.Channel
 	wsHub    StatusBroadcaster
+	metrics  *NotificationMetrics
 	config   NotificationConsumerConfig
 }
 
@@ -58,6 +59,7 @@ func NewNotificationConsumer(
 	prov provider.ProviderClient,
 	ch *amqp.Channel,
 	wsHub StatusBroadcaster,
+	metrics *NotificationMetrics,
 	cfg NotificationConsumerConfig,
 ) NotificationConsumer {
 	return &notificationConsumer{
@@ -65,6 +67,7 @@ func NewNotificationConsumer(
 		provider: prov,
 		channel:  ch,
 		wsHub:    wsHub,
+		metrics:  metrics,
 		config:   cfg,
 	}
 }
@@ -144,6 +147,8 @@ func (c *notificationConsumer) handleMainMessage(ctx context.Context, msg amqp.D
 		return
 	}
 
+	start := time.Now()
+
 	var payload consumerPayload
 	if err := json.Unmarshal(msg.Body, &payload); err != nil {
 		logger.Error().Err(err).Str("channel", channel).Msg("failed to unmarshal message")
@@ -192,6 +197,11 @@ func (c *notificationConsumer) handleMainMessage(ctx context.Context, msg amqp.D
 
 	if err := c.service.MarkAsSent(ctx, id, resp.MessageID); err != nil {
 		logger.Error().Err(err).Str("notificationID", id.String()).Msg("failed to mark as sent")
+	}
+
+	if c.metrics != nil {
+		c.metrics.IncTotal(channel, string(NotificationStatusSent))
+		c.metrics.ObserveDuration(channel, time.Since(start))
 	}
 
 	c.broadcastStatus(n, string(NotificationStatusSent))
@@ -313,6 +323,10 @@ func (c *notificationConsumer) handleDLQMessage(ctx context.Context, msg amqp.De
 	} else {
 		if err := c.service.MarkAsFailed(ctx, id, "max retries exceeded", int(retryCount)); err != nil {
 			logger.Error().Err(err).Str("notificationID", id.String()).Msg("failed to mark as permanently failed")
+		}
+
+		if c.metrics != nil {
+			c.metrics.IncTotal(channel, string(NotificationStatusFailed))
 		}
 
 		// Fetch the notification to get batch ID for broadcasting.
