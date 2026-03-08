@@ -20,6 +20,7 @@ type NotificationService interface {
 	MarkAsProcessing(ctx context.Context, id uuid.UUID) (*Notification, error)
 	MarkAsSent(ctx context.Context, id uuid.UUID, providerMsgID string) error
 	MarkAsFailed(ctx context.Context, id uuid.UUID, reason string, retryCount int) error
+	MarkAsQueued(ctx context.Context, id uuid.UUID) error
 	MarkAsRetrying(ctx context.Context, id uuid.UUID) error
 }
 
@@ -263,6 +264,16 @@ func (s *notificationService) MarkAsFailed(ctx context.Context, id uuid.UUID, re
 	n.FailedAt = &now
 	n.RetryCount = retryCount
 
+	return s.repo.Update(ctx, n)
+}
+
+func (s *notificationService) MarkAsQueued(ctx context.Context, id uuid.UUID) error {
+	n, err := s.repo.GetByID(ctx, id)
+	if err != nil {
+		return err
+	}
+
+	n.Status = NotificationStatusQueued
 	return s.repo.Update(ctx, n)
 }
 
