@@ -9,8 +9,8 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/codes"
 
-	"github.com/baris/notification-hub/internal/notification/domain"
-	"github.com/baris/notification-hub/internal/notification/service"
+	"github.com/bariskaral/insider-notification-hub/internal/notification/domain"
+	"github.com/bariskaral/insider-notification-hub/internal/notification/service"
 )
 
 type notificationProducer struct {

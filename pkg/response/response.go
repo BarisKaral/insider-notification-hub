@@ -1,7 +1,7 @@
 package response
 
 import (
-	"github.com/baris/notification-hub/pkg/errs"
+	"github.com/bariskaral/insider-notification-hub/pkg/errs"
 	"github.com/gofiber/fiber/v2"
 )
 

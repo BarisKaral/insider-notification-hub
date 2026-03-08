@@ -9,7 +9,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/baris/notification-hub/internal/notification/provider"
+	"github.com/bariskaral/insider-notification-hub/internal/notification/provider"
 )
 
 // SMSProvider sends notifications via the SMS channel.

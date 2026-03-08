@@ -7,7 +7,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/baris/notification-hub/pkg/errs"
+	"github.com/bariskaral/insider-notification-hub/pkg/errs"
 	"github.com/go-playground/validator/v10"
 )
 

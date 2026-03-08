@@ -1,4 +1,4 @@
-module github.com/baris/notification-hub
+module github.com/bariskaral/insider-notification-hub
 
 go 1.26.1
 

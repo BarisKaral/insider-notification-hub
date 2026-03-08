@@ -12,11 +12,11 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"golang.org/x/time/rate"
 
-	"github.com/baris/notification-hub/internal/notification/domain"
-	"github.com/baris/notification-hub/internal/notification/metrics"
-	"github.com/baris/notification-hub/internal/notification/service"
-	"github.com/baris/notification-hub/internal/notification/ws"
-	"github.com/baris/notification-hub/pkg/logger"
+	"github.com/bariskaral/insider-notification-hub/internal/notification/domain"
+	"github.com/bariskaral/insider-notification-hub/internal/notification/metrics"
+	"github.com/bariskaral/insider-notification-hub/internal/notification/service"
+	"github.com/bariskaral/insider-notification-hub/internal/notification/ws"
+	"github.com/bariskaral/insider-notification-hub/pkg/logger"
 )
 
 // NotificationConsumer processes notifications from RabbitMQ queues.

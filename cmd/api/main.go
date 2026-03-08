@@ -6,9 +6,9 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/baris/notification-hub/config"
-	"github.com/baris/notification-hub/internal/app"
-	"github.com/baris/notification-hub/pkg/logger"
+	"github.com/bariskaral/insider-notification-hub/config"
+	"github.com/bariskaral/insider-notification-hub/internal/app"
+	"github.com/bariskaral/insider-notification-hub/pkg/logger"
 )
 
 // @title Notification Hub API

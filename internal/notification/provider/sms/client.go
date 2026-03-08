@@ -9,7 +9,7 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 
-	"github.com/baris/notification-hub/pkg/httpclient"
+	"github.com/bariskaral/insider-notification-hub/pkg/httpclient"
 )
 
 // SMSClient is the HTTP client for the SMS provider.

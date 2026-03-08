@@ -8,10 +8,10 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	fiberSwagger "github.com/swaggo/fiber-swagger"
 
-	_ "github.com/baris/notification-hub/docs"
-	"github.com/baris/notification-hub/pkg/errs"
-	"github.com/baris/notification-hub/pkg/middleware"
-	"github.com/baris/notification-hub/pkg/response"
+	_ "github.com/bariskaral/insider-notification-hub/docs"
+	"github.com/bariskaral/insider-notification-hub/pkg/errs"
+	"github.com/bariskaral/insider-notification-hub/pkg/middleware"
+	"github.com/bariskaral/insider-notification-hub/pkg/response"
 )
 
 // setupRouter configures the Fiber application with all routes and middleware.

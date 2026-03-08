@@ -4,10 +4,10 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/baris/notification-hub/internal/notificationtemplate/domain"
-	"github.com/baris/notification-hub/internal/notificationtemplate/service"
-	"github.com/baris/notification-hub/pkg/errs"
-	"github.com/baris/notification-hub/pkg/response"
+	"github.com/bariskaral/insider-notification-hub/internal/notificationtemplate/domain"
+	"github.com/bariskaral/insider-notification-hub/internal/notificationtemplate/service"
+	"github.com/bariskaral/insider-notification-hub/pkg/errs"
+	"github.com/bariskaral/insider-notification-hub/pkg/response"
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 )

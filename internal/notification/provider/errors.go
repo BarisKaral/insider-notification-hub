@@ -3,7 +3,7 @@ package provider
 import (
 	"net/http"
 
-	"github.com/baris/notification-hub/pkg/errs"
+	"github.com/bariskaral/insider-notification-hub/pkg/errs"
 )
 
 var (

@@ -5,9 +5,9 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/baris/notification-hub/internal/notification/domain"
-	"github.com/baris/notification-hub/internal/notification/repository"
-	ntService "github.com/baris/notification-hub/internal/notificationtemplate/service"
+	"github.com/bariskaral/insider-notification-hub/internal/notification/domain"
+	"github.com/bariskaral/insider-notification-hub/internal/notification/repository"
+	ntService "github.com/bariskaral/insider-notification-hub/internal/notificationtemplate/service"
 	"github.com/google/uuid"
 )
 

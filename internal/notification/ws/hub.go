@@ -7,7 +7,7 @@ import (
 
 	"github.com/gofiber/websocket/v2"
 
-	"github.com/baris/notification-hub/pkg/logger"
+	"github.com/bariskaral/insider-notification-hub/pkg/logger"
 )
 
 // StatusBroadcaster broadcasts notification status changes (implemented by WebSocket hub).

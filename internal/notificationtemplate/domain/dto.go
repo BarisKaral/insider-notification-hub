@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/baris/notification-hub/pkg/errs"
+	"github.com/bariskaral/insider-notification-hub/pkg/errs"
 	"github.com/go-playground/validator/v10"
 	"github.com/google/uuid"
 )

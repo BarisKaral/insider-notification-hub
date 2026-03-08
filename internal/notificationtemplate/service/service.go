@@ -7,8 +7,8 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/baris/notification-hub/internal/notificationtemplate/domain"
-	"github.com/baris/notification-hub/internal/notificationtemplate/repository"
+	"github.com/bariskaral/insider-notification-hub/internal/notificationtemplate/domain"
+	"github.com/bariskaral/insider-notification-hub/internal/notificationtemplate/repository"
 )
 
 type NotificationTemplateService interface {

@@ -3,7 +3,7 @@ package health
 import (
 	"context"
 
-	"github.com/baris/notification-hub/pkg/rabbitmq"
+	"github.com/bariskaral/insider-notification-hub/pkg/rabbitmq"
 	"gorm.io/gorm"
 )
 

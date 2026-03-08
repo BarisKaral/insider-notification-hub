@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/baris/notification-hub/internal/notification/domain"
-	ntDomain "github.com/baris/notification-hub/internal/notificationtemplate/domain"
+	"github.com/bariskaral/insider-notification-hub/internal/notification/domain"
+	ntDomain "github.com/bariskaral/insider-notification-hub/internal/notificationtemplate/domain"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"

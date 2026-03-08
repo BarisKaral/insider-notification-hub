@@ -8,10 +8,10 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 
-	"github.com/baris/notification-hub/internal/notification/domain"
-	"github.com/baris/notification-hub/internal/notification/service"
-	"github.com/baris/notification-hub/pkg/errs"
-	"github.com/baris/notification-hub/pkg/response"
+	"github.com/bariskaral/insider-notification-hub/internal/notification/domain"
+	"github.com/bariskaral/insider-notification-hub/internal/notification/service"
+	"github.com/bariskaral/insider-notification-hub/pkg/errs"
+	"github.com/bariskaral/insider-notification-hub/pkg/response"
 )
 
 // NotificationController defines the HTTP controller interface for notification endpoints.

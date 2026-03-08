@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/baris/notification-hub/internal/notification/domain"
-	"github.com/baris/notification-hub/internal/notification/provider"
-	"github.com/baris/notification-hub/internal/notification/repository"
-	"github.com/baris/notification-hub/pkg/logger"
+	"github.com/bariskaral/insider-notification-hub/internal/notification/domain"
+	"github.com/bariskaral/insider-notification-hub/internal/notification/provider"
+	"github.com/bariskaral/insider-notification-hub/internal/notification/repository"
+	"github.com/bariskaral/insider-notification-hub/pkg/logger"
 	"github.com/google/uuid"
 )
 

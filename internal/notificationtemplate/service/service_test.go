@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 
-	"github.com/baris/notification-hub/internal/notificationtemplate/domain"
+	"github.com/bariskaral/insider-notification-hub/internal/notificationtemplate/domain"
 )
 
 // mockRepository implements NotificationTemplateRepository for testing.

@@ -10,7 +10,7 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
-	"github.com/baris/notification-hub/internal/notification/domain"
+	"github.com/bariskaral/insider-notification-hub/internal/notification/domain"
 )
 
 // NotificationRepository defines the data access interface for notifications.

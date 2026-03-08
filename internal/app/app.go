@@ -8,9 +8,9 @@ import (
 	"github.com/gofiber/fiber/v2"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 
-	"github.com/baris/notification-hub/config"
-	"github.com/baris/notification-hub/pkg/logger"
-	"github.com/baris/notification-hub/pkg/tracer"
+	"github.com/bariskaral/insider-notification-hub/config"
+	"github.com/bariskaral/insider-notification-hub/pkg/logger"
+	"github.com/bariskaral/insider-notification-hub/pkg/tracer"
 )
 
 // App is the main application struct that holds the DI container and Fiber instance.

@@ -17,9 +17,9 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
-	"github.com/baris/notification-hub/internal/notification/domain"
-	"github.com/baris/notification-hub/pkg/errs"
-	"github.com/baris/notification-hub/pkg/response"
+	"github.com/bariskaral/insider-notification-hub/internal/notification/domain"
+	"github.com/bariskaral/insider-notification-hub/pkg/errs"
+	"github.com/bariskaral/insider-notification-hub/pkg/response"
 )
 
 // --- Service Mock ---

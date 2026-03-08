@@ -7,7 +7,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 
-	"github.com/baris/notification-hub/internal/notification/domain"
+	"github.com/bariskaral/insider-notification-hub/internal/notification/domain"
 )
 
 func TestRepositoryInterfaceCompliance(t *testing.T) {

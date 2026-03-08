@@ -8,10 +8,10 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/baris/notification-hub/config"
-	"github.com/baris/notification-hub/internal/notification/domain"
-	ntDomain "github.com/baris/notification-hub/internal/notificationtemplate/domain"
-	"github.com/baris/notification-hub/pkg/postgres"
+	"github.com/bariskaral/insider-notification-hub/config"
+	"github.com/bariskaral/insider-notification-hub/internal/notification/domain"
+	ntDomain "github.com/bariskaral/insider-notification-hub/internal/notificationtemplate/domain"
+	"github.com/bariskaral/insider-notification-hub/pkg/postgres"
 )
 
 func main() {
