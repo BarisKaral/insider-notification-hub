@@ -25,8 +25,8 @@ func (c PostgresConfig) DSN() string {
 	)
 }
 
-func NewPostgresDB(cfg PostgresConfig) (*gorm.DB, error) {
-	db, err := gorm.Open(postgres.Open(cfg.DSN()), &gorm.Config{
+func NewPostgresDB(config PostgresConfig) (*gorm.DB, error) {
+	database, err := gorm.Open(postgres.Open(config.DSN()), &gorm.Config{
 		Logger:  logger.Default.LogMode(logger.Silent),
 		NowFunc: func() time.Time { return time.Now().UTC() },
 	})
@@ -34,14 +34,14 @@ func NewPostgresDB(cfg PostgresConfig) (*gorm.DB, error) {
 		return nil, fmt.Errorf("failed to connect to database: %w", err)
 	}
 
-	sqlDB, err := db.DB()
+	sqlDatabase, err := database.DB()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get database instance: %w", err)
 	}
 
-	sqlDB.SetMaxIdleConns(10)
-	sqlDB.SetMaxOpenConns(100)
-	sqlDB.SetConnMaxLifetime(time.Hour)
+	sqlDatabase.SetMaxIdleConns(10)
+	sqlDatabase.SetMaxOpenConns(100)
+	sqlDatabase.SetConnMaxLifetime(time.Hour)
 
-	return db, nil
+	return database, nil
 }

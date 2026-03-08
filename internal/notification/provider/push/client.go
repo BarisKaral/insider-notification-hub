@@ -27,18 +27,18 @@ type PushClientConfig struct {
 }
 
 // NewPushClient creates a new Push provider HTTP client.
-func NewPushClient(cfg PushClientConfig) *PushClient {
-	httpCfg := httpclient.HTTPClientConfig{
-		Timeout:    cfg.Timeout,
-		MaxRetries: cfg.MaxRetries,
+func NewPushClient(config PushClientConfig) *PushClient {
+	httpClientConfig := httpclient.HTTPClientConfig{
+		Timeout:    config.Timeout,
+		MaxRetries: config.MaxRetries,
 		RetryDelay: 1 * time.Second,
 		DefaultHeaders: map[string]string{
-			"x-ins-auth-key": cfg.AuthKey,
+			"x-ins-auth-key": config.AuthKey,
 		},
 	}
 	return &PushClient{
-		httpClient: httpclient.NewHTTPClient(httpCfg),
-		baseURL:    cfg.URL,
+		httpClient: httpclient.NewHTTPClient(httpClientConfig),
+		baseURL:    config.URL,
 	}
 }
 

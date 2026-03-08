@@ -21,73 +21,73 @@ type NotificationTemplateService interface {
 }
 
 type service struct {
-	repo repository.NotificationTemplateRepository
+	notificationTemplateRepository repository.NotificationTemplateRepository
 }
 
 var _ NotificationTemplateService = (*service)(nil)
 
-func NewNotificationTemplateService(repo repository.NotificationTemplateRepository) *service {
-	return &service{repo: repo}
+func NewNotificationTemplateService(notificationTemplateRepository repository.NotificationTemplateRepository) *service {
+	return &service{notificationTemplateRepository: notificationTemplateRepository}
 }
 
 func (s *service) Create(ctx context.Context, req domain.NotificationTemplateCreateRequest) (*domain.NotificationTemplate, error) {
-	t := &domain.NotificationTemplate{
+	template := &domain.NotificationTemplate{
 		Name:    req.Name,
 		Channel: req.Channel,
 		Content: req.Content,
 	}
 
-	if err := s.repo.Create(ctx, t); err != nil {
+	if err := s.notificationTemplateRepository.Create(ctx, template); err != nil {
 		return nil, err
 	}
 
-	return t, nil
+	return template, nil
 }
 
 func (s *service) GetByID(ctx context.Context, id uuid.UUID) (*domain.NotificationTemplate, error) {
-	return s.repo.GetByID(ctx, id)
+	return s.notificationTemplateRepository.GetByID(ctx, id)
 }
 
 func (s *service) List(ctx context.Context, limit, offset int) ([]*domain.NotificationTemplate, int64, error) {
-	return s.repo.List(ctx, limit, offset)
+	return s.notificationTemplateRepository.List(ctx, limit, offset)
 }
 
 func (s *service) Update(ctx context.Context, id uuid.UUID, req domain.NotificationTemplateUpdateRequest) (*domain.NotificationTemplate, error) {
-	t, err := s.repo.GetByID(ctx, id)
+	template, err := s.notificationTemplateRepository.GetByID(ctx, id)
 	if err != nil {
 		return nil, err
 	}
 
 	if req.Name != nil {
-		t.Name = *req.Name
+		template.Name = *req.Name
 	}
 	if req.Channel != nil {
-		t.Channel = *req.Channel
+		template.Channel = *req.Channel
 	}
 	if req.Content != nil {
-		t.Content = *req.Content
+		template.Content = *req.Content
 	}
 
-	if err := s.repo.Update(ctx, t); err != nil {
+	if err := s.notificationTemplateRepository.Update(ctx, template); err != nil {
 		return nil, err
 	}
 
-	return t, nil
+	return template, nil
 }
 
 func (s *service) Delete(ctx context.Context, id uuid.UUID) error {
-	return s.repo.Delete(ctx, id)
+	return s.notificationTemplateRepository.Delete(ctx, id)
 }
 
 // Render fetches a template by ID and replaces {{key}} placeholders with the provided variables.
 // Missing variables leave the placeholder unchanged.
 func (s *service) Render(ctx context.Context, templateID uuid.UUID, variables map[string]string) (string, error) {
-	t, err := s.repo.GetByID(ctx, templateID)
+	template, err := s.notificationTemplateRepository.GetByID(ctx, templateID)
 	if err != nil {
 		return "", err
 	}
 
-	content := t.Content
+	content := template.Content
 	for key, value := range variables {
 		placeholder := fmt.Sprintf("{{%s}}", key)
 		content = strings.ReplaceAll(content, placeholder, value)

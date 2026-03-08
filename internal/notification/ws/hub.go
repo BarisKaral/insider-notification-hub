@@ -21,7 +21,7 @@ var _ StatusBroadcaster = (*NotificationHub)(nil)
 // NotificationHub is the in-memory WebSocket hub for real-time notification status updates.
 type NotificationHub struct {
 	subscribers map[string]map[*websocket.Conn]bool
-	mu          sync.RWMutex
+	mutex       sync.RWMutex
 }
 
 // NotificationStatusUpdate represents a status change message sent over WebSocket.
@@ -40,8 +40,8 @@ func NewNotificationHub() *NotificationHub {
 
 // Subscribe adds a WebSocket connection to the subscriber set for a given key.
 func (h *NotificationHub) Subscribe(key string, conn *websocket.Conn) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
+	h.mutex.Lock()
+	defer h.mutex.Unlock()
 
 	if h.subscribers[key] == nil {
 		h.subscribers[key] = make(map[*websocket.Conn]bool)
@@ -55,8 +55,8 @@ func (h *NotificationHub) Subscribe(key string, conn *websocket.Conn) {
 
 // Unsubscribe removes a WebSocket connection from the subscriber set for a given key.
 func (h *NotificationHub) Unsubscribe(key string, conn *websocket.Conn) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
+	h.mutex.Lock()
+	defer h.mutex.Unlock()
 
 	if conns, ok := h.subscribers[key]; ok {
 		delete(conns, conn)
@@ -93,12 +93,12 @@ func (h *NotificationHub) Broadcast(notificationID string, batchID *string, stat
 
 // broadcastToKey sends a message to all subscribers of the given key.
 func (h *NotificationHub) broadcastToKey(key string, data []byte) {
-	h.mu.RLock()
+	h.mutex.RLock()
 	conns := make([]*websocket.Conn, 0, len(h.subscribers[key]))
 	for conn := range h.subscribers[key] {
 		conns = append(conns, conn)
 	}
-	h.mu.RUnlock()
+	h.mutex.RUnlock()
 
 	for _, conn := range conns {
 		if err := conn.WriteMessage(websocket.TextMessage, data); err != nil {

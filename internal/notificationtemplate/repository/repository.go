@@ -20,17 +20,17 @@ type NotificationTemplateRepository interface {
 }
 
 type repository struct {
-	db *gorm.DB
+	database *gorm.DB
 }
 
 var _ NotificationTemplateRepository = (*repository)(nil)
 
-func NewNotificationTemplateRepository(db *gorm.DB) *repository {
-	return &repository{db: db}
+func NewNotificationTemplateRepository(database *gorm.DB) *repository {
+	return &repository{database: database}
 }
 
 func (r *repository) Create(ctx context.Context, t *domain.NotificationTemplate) error {
-	if err := r.db.WithContext(ctx).Create(t).Error; err != nil {
+	if err := r.database.WithContext(ctx).Create(t).Error; err != nil {
 		if isUniqueViolation(err) {
 			return domain.ErrNotificationTemplateNameExists.WithError(err)
 		}
@@ -40,24 +40,24 @@ func (r *repository) Create(ctx context.Context, t *domain.NotificationTemplate)
 }
 
 func (r *repository) GetByID(ctx context.Context, id uuid.UUID) (*domain.NotificationTemplate, error) {
-	var t domain.NotificationTemplate
-	if err := r.db.WithContext(ctx).Where("id = ?", id).First(&t).Error; err != nil {
+	var template domain.NotificationTemplate
+	if err := r.database.WithContext(ctx).Where("id = ?", id).First(&template).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, domain.ErrNotificationTemplateNotFound
 		}
 		return nil, domain.ErrNotificationTemplateNotFound.WithError(err)
 	}
-	return &t, nil
+	return &template, nil
 }
 
 func (r *repository) List(ctx context.Context, limit, offset int) ([]*domain.NotificationTemplate, int64, error) {
 	var total int64
-	if err := r.db.WithContext(ctx).Model(&domain.NotificationTemplate{}).Count(&total).Error; err != nil {
+	if err := r.database.WithContext(ctx).Model(&domain.NotificationTemplate{}).Count(&total).Error; err != nil {
 		return nil, 0, err
 	}
 
 	var templates []*domain.NotificationTemplate
-	if err := r.db.WithContext(ctx).
+	if err := r.database.WithContext(ctx).
 		Order("created_at DESC").
 		Limit(limit).
 		Offset(offset).
@@ -69,11 +69,11 @@ func (r *repository) List(ctx context.Context, limit, offset int) ([]*domain.Not
 }
 
 func (r *repository) Update(ctx context.Context, t *domain.NotificationTemplate) error {
-	return r.db.WithContext(ctx).Save(t).Error
+	return r.database.WithContext(ctx).Save(t).Error
 }
 
 func (r *repository) Delete(ctx context.Context, id uuid.UUID) error {
-	result := r.db.WithContext(ctx).Where("id = ?", id).Delete(&domain.NotificationTemplate{})
+	result := r.database.WithContext(ctx).Where("id = ?", id).Delete(&domain.NotificationTemplate{})
 	if result.Error != nil {
 		return result.Error
 	}

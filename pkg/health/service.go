@@ -13,47 +13,47 @@ type HealthService interface {
 }
 
 type healthService struct {
-	db       *gorm.DB
-	rabbitmq rabbitmq.RabbitMQConnection
+	database            *gorm.DB
+	rabbitMQConnection rabbitmq.RabbitMQConnection
 }
 
 var _ HealthService = (*healthService)(nil)
 
 // NewHealthService creates a new HealthService.
-func NewHealthService(db *gorm.DB, rabbitmq rabbitmq.RabbitMQConnection) HealthService {
+func NewHealthService(database *gorm.DB, rabbitMQConnection rabbitmq.RabbitMQConnection) HealthService {
 	return &healthService{
-		db:       db,
-		rabbitmq: rabbitmq,
+		database:            database,
+		rabbitMQConnection: rabbitMQConnection,
 	}
 }
 
 // Check performs health checks on DB and RabbitMQ dependencies.
 func (s *healthService) Check(ctx context.Context) HealthResponse {
-	resp := HealthResponse{
+	response := HealthResponse{
 		Status: "healthy",
 		Checks: make(map[string]string),
 	}
 
 	// Check database connectivity.
 	var result int
-	if err := s.db.WithContext(ctx).Raw("SELECT 1").Scan(&result).Error; err != nil {
-		resp.Status = "unhealthy"
-		resp.Checks["database"] = "down"
+	if err := s.database.WithContext(ctx).Raw("SELECT 1").Scan(&result).Error; err != nil {
+		response.Status = "unhealthy"
+		response.Checks["database"] = "down"
 	} else {
-		resp.Checks["database"] = "up"
+		response.Checks["database"] = "up"
 	}
 
 	// Check RabbitMQ connectivity by opening and closing a channel.
-	ch, err := s.rabbitmq.Channel()
+	ch, err := s.rabbitMQConnection.Channel()
 	if err != nil {
-		resp.Status = "unhealthy"
-		resp.Checks["rabbitmq"] = "down"
+		response.Status = "unhealthy"
+		response.Checks["rabbitmq"] = "down"
 	} else {
 		if ch != nil {
 			ch.Close()
 		}
-		resp.Checks["rabbitmq"] = "up"
+		response.Checks["rabbitmq"] = "up"
 	}
 
-	return resp
+	return response
 }

@@ -16,26 +16,25 @@ type RabbitMQConfig struct {
 }
 
 type connection struct {
-	conn *amqp.Connection
+	amqpConnection *amqp.Connection
 }
 
-func NewRabbitMQConnection(cfg RabbitMQConfig) (RabbitMQConnection, error) {
-	conn, err := amqp.Dial(cfg.URL)
+func NewRabbitMQConnection(config RabbitMQConfig) (RabbitMQConnection, error) {
+	amqpConnection, err := amqp.Dial(config.URL)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrRabbitMQConnectionFailed, err)
 	}
-	return &connection{conn: conn}, nil
+	return &connection{amqpConnection: amqpConnection}, nil
 }
 
 func (c *connection) Channel() (*amqp.Channel, error) {
-	ch, err := c.conn.Channel()
+	channel, err := c.amqpConnection.Channel()
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrRabbitMQChannelFailed, err)
 	}
-	return ch, nil
+	return channel, nil
 }
 
 func (c *connection) Close() error {
-	return c.conn.Close()
+	return c.amqpConnection.Close()
 }
-

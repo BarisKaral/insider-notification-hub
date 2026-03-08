@@ -34,17 +34,17 @@ type NotificationProducer interface {
 }
 
 type notificationService struct {
-	repo            repository.NotificationRepository
-	templateService ntService.NotificationTemplateService
+	notificationRepository      repository.NotificationRepository
+	notificationTemplateService ntService.NotificationTemplateService
 }
 
 var _ NotificationService = (*notificationService)(nil)
 
 // NewNotificationService creates a new NotificationService.
-func NewNotificationService(repo repository.NotificationRepository, templateSvc ntService.NotificationTemplateService) *notificationService {
+func NewNotificationService(notificationRepository repository.NotificationRepository, notificationTemplateService ntService.NotificationTemplateService) *notificationService {
 	return &notificationService{
-		repo:            repo,
-		templateService: templateSvc,
+		notificationRepository:      notificationRepository,
+		notificationTemplateService: notificationTemplateService,
 	}
 }
 
@@ -54,7 +54,7 @@ func (s *notificationService) Create(ctx context.Context, req domain.Notificatio
 	if idempotencyKey != nil {
 		key = *idempotencyKey
 		// Check for duplicate.
-		existing, err := s.repo.GetByIdempotencyKey(ctx, key)
+		existing, err := s.notificationRepository.GetByIdempotencyKey(ctx, key)
 		if err != nil {
 			return nil, err
 		}
@@ -72,7 +72,7 @@ func (s *notificationService) Create(ctx context.Context, req domain.Notificatio
 	var templateVars json.RawMessage
 
 	if req.TemplateID != nil {
-		rendered, err := s.templateService.Render(ctx, *req.TemplateID, req.Variables)
+		rendered, err := s.notificationTemplateService.Render(ctx, *req.TemplateID, req.Variables)
 		if err != nil {
 			return nil, err
 		}
@@ -102,7 +102,7 @@ func (s *notificationService) Create(ctx context.Context, req domain.Notificatio
 		priority = domain.NotificationPriority(req.Priority)
 	}
 
-	n := &domain.Notification{
+	notification := &domain.Notification{
 		Recipient:      req.Recipient,
 		Channel:        domain.NotificationChannel(req.Channel),
 		Content:        content,
@@ -114,60 +114,60 @@ func (s *notificationService) Create(ctx context.Context, req domain.Notificatio
 		ScheduledAt:    req.ScheduledAt,
 	}
 
-	if err := s.repo.Create(ctx, n); err != nil {
+	if err := s.notificationRepository.Create(ctx, notification); err != nil {
 		return nil, err
 	}
 
-	return n, nil
+	return notification, nil
 }
 
 func (s *notificationService) CreateBatch(ctx context.Context, req domain.NotificationBatchCreateRequest) ([]*domain.Notification, uuid.UUID, error) {
 	batchID := uuid.New()
 	notifications := make([]*domain.Notification, 0, len(req.Notifications))
 
-	for _, r := range req.Notifications {
+	for _, request := range req.Notifications {
 		// Resolve content.
 		content := ""
 		var templateID *uuid.UUID
 		var templateVars json.RawMessage
 
-		if r.TemplateID != nil {
-			rendered, err := s.templateService.Render(ctx, *r.TemplateID, r.Variables)
+		if request.TemplateID != nil {
+			rendered, err := s.notificationTemplateService.Render(ctx, *request.TemplateID, request.Variables)
 			if err != nil {
 				return nil, uuid.Nil, err
 			}
 			content = rendered
-			templateID = r.TemplateID
+			templateID = request.TemplateID
 
-			if r.Variables != nil {
-				varsJSON, err := json.Marshal(r.Variables)
+			if request.Variables != nil {
+				varsJSON, err := json.Marshal(request.Variables)
 				if err != nil {
 					return nil, uuid.Nil, err
 				}
 				templateVars = varsJSON
 			}
-		} else if r.Content != nil {
-			content = *r.Content
+		} else if request.Content != nil {
+			content = *request.Content
 		}
 
 		// Determine status.
 		status := domain.NotificationStatusPending
-		if r.ScheduledAt != nil && r.ScheduledAt.After(time.Now().UTC()) {
+		if request.ScheduledAt != nil && request.ScheduledAt.After(time.Now().UTC()) {
 			status = domain.NotificationStatusScheduled
 		}
 
 		// Default priority.
 		priority := domain.NotificationPriorityNormal
-		if r.Priority != "" {
-			priority = domain.NotificationPriority(r.Priority)
+		if request.Priority != "" {
+			priority = domain.NotificationPriority(request.Priority)
 		}
 
 		// Server-generated idempotency key for each notification in batch.
 		key := uuid.New().String()
 
-		n := &domain.Notification{
-			Recipient:      r.Recipient,
-			Channel:        domain.NotificationChannel(r.Channel),
+		notification := &domain.Notification{
+			Recipient:      request.Recipient,
+			Channel:        domain.NotificationChannel(request.Channel),
 			Content:        content,
 			Priority:       priority,
 			Status:         status,
@@ -175,13 +175,13 @@ func (s *notificationService) CreateBatch(ctx context.Context, req domain.Notifi
 			IdempotencyKey: &key,
 			TemplateID:     templateID,
 			TemplateVars:   templateVars,
-			ScheduledAt:    r.ScheduledAt,
+			ScheduledAt:    request.ScheduledAt,
 		}
 
-		notifications = append(notifications, n)
+		notifications = append(notifications, notification)
 	}
 
-	if err := s.repo.CreateBatch(ctx, notifications); err != nil {
+	if err := s.notificationRepository.CreateBatch(ctx, notifications); err != nil {
 		return nil, uuid.Nil, err
 	}
 
@@ -189,24 +189,24 @@ func (s *notificationService) CreateBatch(ctx context.Context, req domain.Notifi
 }
 
 func (s *notificationService) GetByID(ctx context.Context, id uuid.UUID) (*domain.Notification, error) {
-	return s.repo.GetByID(ctx, id)
+	return s.notificationRepository.GetByID(ctx, id)
 }
 
 func (s *notificationService) GetByBatchID(ctx context.Context, batchID uuid.UUID) ([]*domain.Notification, error) {
-	return s.repo.GetByBatchID(ctx, batchID)
+	return s.notificationRepository.GetByBatchID(ctx, batchID)
 }
 
 func (s *notificationService) List(ctx context.Context, filter domain.NotificationListFilter) ([]*domain.Notification, int64, error) {
-	return s.repo.List(ctx, filter)
+	return s.notificationRepository.List(ctx, filter)
 }
 
 func (s *notificationService) Cancel(ctx context.Context, id uuid.UUID) (*domain.Notification, error) {
-	n, err := s.repo.GetByID(ctx, id)
+	notification, err := s.notificationRepository.GetByID(ctx, id)
 	if err != nil {
 		return nil, err
 	}
 
-	switch n.Status {
+	switch notification.Status {
 	case domain.NotificationStatusSent:
 		return nil, domain.ErrNotificationAlreadySent
 	case domain.NotificationStatusCancelled:
@@ -214,86 +214,86 @@ func (s *notificationService) Cancel(ctx context.Context, id uuid.UUID) (*domain
 	case domain.NotificationStatusProcessing, domain.NotificationStatusRetrying:
 		return nil, domain.ErrNotificationCancelFailed
 	case domain.NotificationStatusPending, domain.NotificationStatusScheduled, domain.NotificationStatusQueued, domain.NotificationStatusFailed:
-		n.Status = domain.NotificationStatusCancelled
-		if err := s.repo.Update(ctx, n); err != nil {
+		notification.Status = domain.NotificationStatusCancelled
+		if err := s.notificationRepository.Update(ctx, notification); err != nil {
 			return nil, err
 		}
-		return n, nil
+		return notification, nil
 	default:
 		return nil, domain.ErrNotificationCancelFailed
 	}
 }
 
 func (s *notificationService) MarkAsProcessing(ctx context.Context, id uuid.UUID) (*domain.Notification, error) {
-	n, err := s.repo.GetForProcessing(ctx, id)
+	notification, err := s.notificationRepository.GetForProcessing(ctx, id)
 	if err != nil {
 		return nil, err
 	}
 
 	// Skip cancelled or sent — return as-is so consumer can check status.
-	if n.Status == domain.NotificationStatusCancelled || n.Status == domain.NotificationStatusSent {
-		return n, nil
+	if notification.Status == domain.NotificationStatusCancelled || notification.Status == domain.NotificationStatusSent {
+		return notification, nil
 	}
 
-	if !n.Status.CanTransitionTo(domain.NotificationStatusProcessing) {
+	if !notification.Status.CanTransitionTo(domain.NotificationStatusProcessing) {
 		return nil, domain.ErrNotificationInvalidStatus
 	}
 
-	n.Status = domain.NotificationStatusProcessing
-	if err := s.repo.Update(ctx, n); err != nil {
+	notification.Status = domain.NotificationStatusProcessing
+	if err := s.notificationRepository.Update(ctx, notification); err != nil {
 		return nil, err
 	}
 
-	return n, nil
+	return notification, nil
 }
 
 func (s *notificationService) MarkAsSent(ctx context.Context, id uuid.UUID, providerMsgID string) error {
-	n, err := s.repo.GetByID(ctx, id)
+	notification, err := s.notificationRepository.GetByID(ctx, id)
 	if err != nil {
 		return err
 	}
 
 	now := time.Now().UTC()
-	n.Status = domain.NotificationStatusSent
-	n.ProviderMsgID = &providerMsgID
-	n.SentAt = &now
+	notification.Status = domain.NotificationStatusSent
+	notification.ProviderMsgID = &providerMsgID
+	notification.SentAt = &now
 
-	return s.repo.Update(ctx, n)
+	return s.notificationRepository.Update(ctx, notification)
 }
 
 func (s *notificationService) MarkAsFailed(ctx context.Context, id uuid.UUID, reason string, retryCount int) error {
-	n, err := s.repo.GetByID(ctx, id)
+	notification, err := s.notificationRepository.GetByID(ctx, id)
 	if err != nil {
 		return err
 	}
 
 	now := time.Now().UTC()
-	n.Status = domain.NotificationStatusFailed
-	n.FailureReason = &reason
-	n.FailedAt = &now
-	n.RetryCount = retryCount
+	notification.Status = domain.NotificationStatusFailed
+	notification.FailureReason = &reason
+	notification.FailedAt = &now
+	notification.RetryCount = retryCount
 
-	return s.repo.Update(ctx, n)
+	return s.notificationRepository.Update(ctx, notification)
 }
 
 func (s *notificationService) MarkAsQueued(ctx context.Context, id uuid.UUID) error {
-	n, err := s.repo.GetByID(ctx, id)
+	notification, err := s.notificationRepository.GetByID(ctx, id)
 	if err != nil {
 		return err
 	}
 
-	n.Status = domain.NotificationStatusQueued
-	return s.repo.Update(ctx, n)
+	notification.Status = domain.NotificationStatusQueued
+	return s.notificationRepository.Update(ctx, notification)
 }
 
 func (s *notificationService) MarkAsRetrying(ctx context.Context, id uuid.UUID) error {
-	n, err := s.repo.GetByID(ctx, id)
+	notification, err := s.notificationRepository.GetByID(ctx, id)
 	if err != nil {
 		return err
 	}
 
-	n.Status = domain.NotificationStatusRetrying
+	notification.Status = domain.NotificationStatusRetrying
 
-	return s.repo.Update(ctx, n)
+	return s.notificationRepository.Update(ctx, notification)
 }
 

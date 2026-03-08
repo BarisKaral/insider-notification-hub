@@ -14,14 +14,14 @@ import (
 )
 
 type notificationProducer struct {
-	channel *amqp.Channel
+	amqpChannel *amqp.Channel
 }
 
 var _ service.NotificationProducer = (*notificationProducer)(nil)
 
 // NewNotificationProducer creates a new producer that publishes to the notification exchange.
-func NewNotificationProducer(ch *amqp.Channel) *notificationProducer {
-	return &notificationProducer{channel: ch}
+func NewNotificationProducer(amqpChannel *amqp.Channel) *notificationProducer {
+	return &notificationProducer{amqpChannel: amqpChannel}
 }
 
 type messagePayload struct {
@@ -84,7 +84,7 @@ func (p *notificationProducer) Publish(ctx context.Context, n *domain.Notificati
 	// Inject trace context into AMQP headers for propagation to consumer.
 	otel.GetTextMapPropagator().Inject(ctx, amqpHeaderCarrier(headers))
 
-	err = p.channel.PublishWithContext(ctx,
+	err = p.amqpChannel.PublishWithContext(ctx,
 		"notification.exchange", // exchange
 		string(n.Channel),      // routing key
 		false,                  // mandatory
@@ -144,7 +144,7 @@ func (p *notificationProducer) PublishToRetry(ctx context.Context, n *domain.Not
 
 	otel.GetTextMapPropagator().Inject(ctx, amqpHeaderCarrier(headers))
 
-	err = p.channel.PublishWithContext(ctx,
+	err = p.amqpChannel.PublishWithContext(ctx,
 		"notification.retry.exchange",
 		string(n.Channel),
 		false,

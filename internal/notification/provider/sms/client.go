@@ -27,18 +27,18 @@ type SMSClientConfig struct {
 }
 
 // NewSMSClient creates a new SMS provider HTTP client.
-func NewSMSClient(cfg SMSClientConfig) *SMSClient {
-	httpCfg := httpclient.HTTPClientConfig{
-		Timeout:    cfg.Timeout,
-		MaxRetries: cfg.MaxRetries,
+func NewSMSClient(config SMSClientConfig) *SMSClient {
+	httpClientConfig := httpclient.HTTPClientConfig{
+		Timeout:    config.Timeout,
+		MaxRetries: config.MaxRetries,
 		RetryDelay: 1 * time.Second,
 		DefaultHeaders: map[string]string{
-			"x-ins-auth-key": cfg.AuthKey,
+			"x-ins-auth-key": config.AuthKey,
 		},
 	}
 	return &SMSClient{
-		httpClient: httpclient.NewHTTPClient(httpCfg),
-		baseURL:    cfg.URL,
+		httpClient: httpclient.NewHTTPClient(httpClientConfig),
+		baseURL:    config.URL,
 	}
 }
 

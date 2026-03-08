@@ -26,17 +26,17 @@ type NotificationController interface {
 }
 
 type notificationController struct {
-	service           service.NotificationService
-	processingService service.NotificationProcessingService
+	notificationService           service.NotificationService
+	notificationProcessingService service.NotificationProcessingService
 }
 
 var _ NotificationController = (*notificationController)(nil)
 
 // NewNotificationController creates a new NotificationController.
-func NewNotificationController(svc service.NotificationService, processingSvc service.NotificationProcessingService) NotificationController {
+func NewNotificationController(notificationService service.NotificationService, notificationProcessingService service.NotificationProcessingService) NotificationController {
 	return &notificationController{
-		service:           svc,
-		processingService: processingSvc,
+		notificationService:           notificationService,
+		notificationProcessingService: notificationProcessingService,
 	}
 }
 
@@ -73,20 +73,20 @@ func (h *notificationController) Create(c *fiber.Ctx) error {
 	}
 
 	// Parse request body.
-	var req domain.NotificationCreateRequest
-	if err := c.BodyParser(&req); err != nil {
+	var request domain.NotificationCreateRequest
+	if err := c.BodyParser(&request); err != nil {
 		return response.Error(c, http.StatusBadRequest, "INVALID_BODY", "invalid request body")
 	}
 
 	// Validate.
-	if err := req.Validate(); err != nil {
+	if err := request.Validate(); err != nil {
 		if appErr, ok := err.(*errs.AppError); ok {
 			return response.AppError(c, appErr)
 		}
 		return response.Error(c, http.StatusBadRequest, "VALIDATION_ERROR", err.Error())
 	}
 
-	n, err := h.processingService.Create(ctx, req, idempotencyKey)
+	notification, err := h.notificationProcessingService.Create(ctx, request, idempotencyKey)
 	if err != nil {
 		if appErr, ok := err.(*errs.AppError); ok {
 			return response.AppError(c, appErr)
@@ -94,7 +94,7 @@ func (h *notificationController) Create(c *fiber.Ctx) error {
 		return response.Error(c, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to create notification")
 	}
 
-	return response.Success(c, http.StatusCreated, domain.ToNotificationResponse(n))
+	return response.Success(c, http.StatusCreated, domain.ToNotificationResponse(notification))
 }
 
 // CreateBatch handles POST /notifications/batch.
@@ -112,20 +112,20 @@ func (h *notificationController) CreateBatch(c *fiber.Ctx) error {
 	ctx := c.UserContext()
 
 	// Parse request body.
-	var req domain.NotificationBatchCreateRequest
-	if err := c.BodyParser(&req); err != nil {
+	var request domain.NotificationBatchCreateRequest
+	if err := c.BodyParser(&request); err != nil {
 		return response.Error(c, http.StatusBadRequest, "INVALID_BODY", "invalid request body")
 	}
 
 	// Validate.
-	if err := req.Validate(); err != nil {
+	if err := request.Validate(); err != nil {
 		if appErr, ok := err.(*errs.AppError); ok {
 			return response.AppError(c, appErr)
 		}
 		return response.Error(c, http.StatusBadRequest, "VALIDATION_ERROR", err.Error())
 	}
 
-	notifications, batchID, err := h.processingService.CreateBatch(ctx, req)
+	notifications, batchID, err := h.notificationProcessingService.CreateBatch(ctx, request)
 	if err != nil {
 		if appErr, ok := err.(*errs.AppError); ok {
 			return response.AppError(c, appErr)
@@ -156,7 +156,7 @@ func (h *notificationController) GetByID(c *fiber.Ctx) error {
 		return response.Error(c, http.StatusBadRequest, "INVALID_ID", "invalid notification ID")
 	}
 
-	n, err := h.service.GetByID(c.UserContext(), id)
+	notification, err := h.notificationService.GetByID(c.UserContext(), id)
 	if err != nil {
 		if appErr, ok := err.(*errs.AppError); ok {
 			return response.AppError(c, appErr)
@@ -164,7 +164,7 @@ func (h *notificationController) GetByID(c *fiber.Ctx) error {
 		return response.Error(c, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to get notification")
 	}
 
-	return response.Success(c, http.StatusOK, domain.ToNotificationResponse(n))
+	return response.Success(c, http.StatusOK, domain.ToNotificationResponse(notification))
 }
 
 // GetByBatchID handles GET /notifications/batch/:batchId.
@@ -183,7 +183,7 @@ func (h *notificationController) GetByBatchID(c *fiber.Ctx) error {
 		return response.Error(c, http.StatusBadRequest, "INVALID_ID", "invalid batch ID")
 	}
 
-	notifications, err := h.service.GetByBatchID(c.UserContext(), batchID)
+	notifications, err := h.notificationService.GetByBatchID(c.UserContext(), batchID)
 	if err != nil {
 		if appErr, ok := err.(*errs.AppError); ok {
 			return response.AppError(c, appErr)
@@ -222,24 +222,24 @@ func (h *notificationController) List(c *fiber.Ctx) error {
 
 	// Parse optional date filters.
 	if startDate := c.Query("startDate"); startDate != "" {
-		t, err := time.Parse(time.RFC3339, startDate)
+		parsedTime, err := time.Parse(time.RFC3339, startDate)
 		if err != nil {
 			return response.Error(c, http.StatusBadRequest, "INVALID_PARAM", "invalid startDate format, expected RFC3339")
 		}
-		filter.StartDate = &t
+		filter.StartDate = &parsedTime
 	}
 
 	if endDate := c.Query("endDate"); endDate != "" {
-		t, err := time.Parse(time.RFC3339, endDate)
+		parsedTime, err := time.Parse(time.RFC3339, endDate)
 		if err != nil {
 			return response.Error(c, http.StatusBadRequest, "INVALID_PARAM", "invalid endDate format, expected RFC3339")
 		}
-		filter.EndDate = &t
+		filter.EndDate = &parsedTime
 	}
 
 	filter.Normalize()
 
-	notifications, total, err := h.service.List(c.UserContext(), filter)
+	notifications, total, err := h.notificationService.List(c.UserContext(), filter)
 	if err != nil {
 		if appErr, ok := err.(*errs.AppError); ok {
 			return response.AppError(c, appErr)
@@ -273,7 +273,7 @@ func (h *notificationController) Cancel(c *fiber.Ctx) error {
 		return response.Error(c, http.StatusBadRequest, "INVALID_ID", "invalid notification ID")
 	}
 
-	n, err := h.service.Cancel(c.UserContext(), id)
+	notification, err := h.notificationService.Cancel(c.UserContext(), id)
 	if err != nil {
 		if appErr, ok := err.(*errs.AppError); ok {
 			return response.AppError(c, appErr)
@@ -281,5 +281,5 @@ func (h *notificationController) Cancel(c *fiber.Ctx) error {
 		return response.Error(c, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to cancel notification")
 	}
 
-	return response.Success(c, http.StatusOK, domain.ToNotificationResponse(n))
+	return response.Success(c, http.StatusOK, domain.ToNotificationResponse(notification))
 }

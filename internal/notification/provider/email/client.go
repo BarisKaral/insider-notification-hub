@@ -27,18 +27,18 @@ type EmailClientConfig struct {
 }
 
 // NewEmailClient creates a new Email provider HTTP client.
-func NewEmailClient(cfg EmailClientConfig) *EmailClient {
-	httpCfg := httpclient.HTTPClientConfig{
-		Timeout:    cfg.Timeout,
-		MaxRetries: cfg.MaxRetries,
+func NewEmailClient(config EmailClientConfig) *EmailClient {
+	httpClientConfig := httpclient.HTTPClientConfig{
+		Timeout:    config.Timeout,
+		MaxRetries: config.MaxRetries,
 		RetryDelay: 1 * time.Second,
 		DefaultHeaders: map[string]string{
-			"x-ins-auth-key": cfg.AuthKey,
+			"x-ins-auth-key": config.AuthKey,
 		},
 	}
 	return &EmailClient{
-		httpClient: httpclient.NewHTTPClient(httpCfg),
-		baseURL:    cfg.URL,
+		httpClient: httpclient.NewHTTPClient(httpClientConfig),
+		baseURL:    config.URL,
 	}
 }
 

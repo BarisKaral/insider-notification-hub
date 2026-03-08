@@ -60,7 +60,7 @@ type JaegerConfig struct {
 func NewConfig() (*Config, error) {
 	_ = godotenv.Load()
 
-	cfg := &Config{
+	config := &Config{
 		AppPort: getEnv("APP_PORT", "8080"),
 		Database: DatabaseConfig{
 			Host:     getEnv("DB_HOST", "localhost"),
@@ -91,11 +91,11 @@ func NewConfig() (*Config, error) {
 		},
 	}
 
-	if err := cfg.validate(); err != nil {
+	if err := config.validate(); err != nil {
 		return nil, err
 	}
 
-	return cfg, nil
+	return config, nil
 }
 
 func (c *Config) validate() error {

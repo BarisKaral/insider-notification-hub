@@ -22,13 +22,13 @@ type NotificationTemplateController interface {
 }
 
 type controller struct {
-	svc service.NotificationTemplateService
+	notificationTemplateService service.NotificationTemplateService
 }
 
 var _ NotificationTemplateController = (*controller)(nil)
 
-func NewNotificationTemplateController(svc service.NotificationTemplateService) NotificationTemplateController {
-	return &controller{svc: svc}
+func NewNotificationTemplateController(notificationTemplateService service.NotificationTemplateService) NotificationTemplateController {
+	return &controller{notificationTemplateService: notificationTemplateService}
 }
 
 func (h *controller) RegisterRoutes(router fiber.Router) {
@@ -52,19 +52,19 @@ func (h *controller) RegisterRoutes(router fiber.Router) {
 // @Failure 500 {object} response.APIResponse
 // @Router /notification-templates [post]
 func (h *controller) Create(c *fiber.Ctx) error {
-	var req domain.NotificationTemplateCreateRequest
-	if err := c.BodyParser(&req); err != nil {
+	var request domain.NotificationTemplateCreateRequest
+	if err := c.BodyParser(&request); err != nil {
 		return response.Error(c, http.StatusBadRequest, "INVALID_BODY", "invalid request body")
 	}
 
-	if err := req.Validate(); err != nil {
+	if err := request.Validate(); err != nil {
 		if appErr, ok := err.(*errs.AppError); ok {
 			return response.AppError(c, appErr)
 		}
 		return response.Error(c, http.StatusBadRequest, "VALIDATION_ERROR", err.Error())
 	}
 
-	t, err := h.svc.Create(c.Context(), req)
+	template, err := h.notificationTemplateService.Create(c.Context(), request)
 	if err != nil {
 		if appErr, ok := err.(*errs.AppError); ok {
 			return response.AppError(c, appErr)
@@ -72,7 +72,7 @@ func (h *controller) Create(c *fiber.Ctx) error {
 		return response.Error(c, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to create template")
 	}
 
-	return response.Success(c, http.StatusCreated, domain.ToNotificationTemplateResponse(t))
+	return response.Success(c, http.StatusCreated, domain.ToNotificationTemplateResponse(template))
 }
 
 // GetByID handles GET /notification-templates/:id.
@@ -92,7 +92,7 @@ func (h *controller) GetByID(c *fiber.Ctx) error {
 		return response.Error(c, http.StatusBadRequest, "INVALID_ID", "invalid template ID")
 	}
 
-	t, err := h.svc.GetByID(c.Context(), id)
+	template, err := h.notificationTemplateService.GetByID(c.Context(), id)
 	if err != nil {
 		if appErr, ok := err.(*errs.AppError); ok {
 			return response.AppError(c, appErr)
@@ -100,7 +100,7 @@ func (h *controller) GetByID(c *fiber.Ctx) error {
 		return response.Error(c, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to get template")
 	}
 
-	return response.Success(c, http.StatusOK, domain.ToNotificationTemplateResponse(t))
+	return response.Success(c, http.StatusOK, domain.ToNotificationTemplateResponse(template))
 }
 
 // List handles GET /notification-templates.
@@ -127,7 +127,7 @@ func (h *controller) List(c *fiber.Ctx) error {
 		offset = 0
 	}
 
-	templates, total, err := h.svc.List(c.Context(), limit, offset)
+	templates, total, err := h.notificationTemplateService.List(c.Context(), limit, offset)
 	if err != nil {
 		return response.Error(c, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to list templates")
 	}
@@ -159,19 +159,19 @@ func (h *controller) Update(c *fiber.Ctx) error {
 		return response.Error(c, http.StatusBadRequest, "INVALID_ID", "invalid template ID")
 	}
 
-	var req domain.NotificationTemplateUpdateRequest
-	if err := c.BodyParser(&req); err != nil {
+	var request domain.NotificationTemplateUpdateRequest
+	if err := c.BodyParser(&request); err != nil {
 		return response.Error(c, http.StatusBadRequest, "INVALID_BODY", "invalid request body")
 	}
 
-	if err := req.Validate(); err != nil {
+	if err := request.Validate(); err != nil {
 		if appErr, ok := err.(*errs.AppError); ok {
 			return response.AppError(c, appErr)
 		}
 		return response.Error(c, http.StatusBadRequest, "VALIDATION_ERROR", err.Error())
 	}
 
-	t, err := h.svc.Update(c.Context(), id, req)
+	template, err := h.notificationTemplateService.Update(c.Context(), id, request)
 	if err != nil {
 		if appErr, ok := err.(*errs.AppError); ok {
 			return response.AppError(c, appErr)
@@ -179,7 +179,7 @@ func (h *controller) Update(c *fiber.Ctx) error {
 		return response.Error(c, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to update template")
 	}
 
-	return response.Success(c, http.StatusOK, domain.ToNotificationTemplateResponse(t))
+	return response.Success(c, http.StatusOK, domain.ToNotificationTemplateResponse(template))
 }
 
 // Delete handles DELETE /notification-templates/:id.
@@ -198,7 +198,7 @@ func (h *controller) Delete(c *fiber.Ctx) error {
 		return response.Error(c, http.StatusBadRequest, "INVALID_ID", "invalid template ID")
 	}
 
-	if err := h.svc.Delete(c.Context(), id); err != nil {
+	if err := h.notificationTemplateService.Delete(c.Context(), id); err != nil {
 		if appErr, ok := err.(*errs.AppError); ok {
 			return response.AppError(c, appErr)
 		}

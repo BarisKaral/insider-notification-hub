@@ -36,7 +36,7 @@ type Container struct {
 	RabbitMQ rabbitmq.RabbitMQConnection
 
 	// Notification domain
-	NotificationRepo              repository.NotificationRepository
+	NotificationRepository        repository.NotificationRepository
 	NotificationService           service.NotificationService
 	NotificationProcessingService service.NotificationProcessingService
 	NotificationProducer          service.NotificationProducer
@@ -45,9 +45,9 @@ type Container struct {
 	NotificationMetrics           *metrics.NotificationMetrics
 
 	// Template domain
-	TemplateRepo       ntRepository.NotificationTemplateRepository
-	TemplateService    ntService.NotificationTemplateService
-	TemplateController ntController.NotificationTemplateController
+	NotificationTemplateRepository ntRepository.NotificationTemplateRepository
+	NotificationTemplateService    ntService.NotificationTemplateService
+	NotificationTemplateController ntController.NotificationTemplateController
 
 	// Infrastructure
 	HealthService health.HealthService
@@ -56,127 +56,127 @@ type Container struct {
 }
 
 // NewContainer creates and wires all application dependencies.
-func NewContainer(cfg *config.Config) (*Container, error) {
-	c := &Container{Config: cfg}
+func NewContainer(config *config.Config) (*Container, error) {
+	container := &Container{Config: config}
 
 	// 1. PostgreSQL connection
-	pgCfg := postgres.PostgresConfig{
-		Host:     cfg.Database.Host,
-		Port:     cfg.Database.Port,
-		User:     cfg.Database.User,
-		Password: cfg.Database.Password,
-		Name:     cfg.Database.Name,
-		SSLMode:  cfg.Database.SSLMode,
+	postgresConfig := postgres.PostgresConfig{
+		Host:     config.Database.Host,
+		Port:     config.Database.Port,
+		User:     config.Database.User,
+		Password: config.Database.Password,
+		Name:     config.Database.Name,
+		SSLMode:  config.Database.SSLMode,
 	}
-	db, err := postgres.NewPostgresDB(pgCfg)
+	database, err := postgres.NewPostgresDB(postgresConfig)
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to database: %w", err)
 	}
-	c.DB = db
+	container.DB = database
 
 	// 2. Run migrations
-	if err := runMigrations(db); err != nil {
+	if err := runMigrations(database); err != nil {
 		return nil, fmt.Errorf("failed to run migrations: %w", err)
 	}
 
 	// 3. RabbitMQ connection
-	rmqConn, err := rabbitmq.NewRabbitMQConnection(rabbitmq.RabbitMQConfig{URL: cfg.RabbitMQ.URL})
+	rabbitMQConnection, err := rabbitmq.NewRabbitMQConnection(rabbitmq.RabbitMQConfig{URL: config.RabbitMQ.URL})
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to rabbitmq: %w", err)
 	}
-	c.RabbitMQ = rmqConn
+	container.RabbitMQ = rabbitMQConnection
 
 	// 4. Setup queues
-	setupCh, err := rmqConn.Channel()
+	setupChannel, err := rabbitMQConnection.Channel()
 	if err != nil {
 		return nil, fmt.Errorf("failed to create setup channel: %w", err)
 	}
-	if err := messaging.SetupNotificationQueues(setupCh); err != nil {
+	if err := messaging.SetupNotificationQueues(setupChannel); err != nil {
 		return nil, fmt.Errorf("failed to setup queues: %w", err)
 	}
-	if err := setupCh.Close(); err != nil {
+	if err := setupChannel.Close(); err != nil {
 		logger.Error().Err(err).Msg("failed to close setup channel")
 	}
 
 	// 5. Provider factory
-	providerCfg := provider.ProviderConfig{
-		URL:        cfg.Provider.URL,
-		AuthKey:    cfg.Provider.AuthKey,
-		Timeout:    cfg.Provider.Timeout,
-		MaxRetries: cfg.Provider.MaxRetries,
+	providerConfig := provider.ProviderConfig{
+		URL:        config.Provider.URL,
+		AuthKey:    config.Provider.AuthKey,
+		Timeout:    config.Provider.Timeout,
+		MaxRetries: config.Provider.MaxRetries,
 	}
 	providers := map[domain.NotificationChannel]provider.NotificationProvider{
 		domain.NotificationChannelSMS: sms.NewSMSProvider(sms.SMSClientConfig{
-			URL: providerCfg.URL, AuthKey: providerCfg.AuthKey,
-			Timeout: providerCfg.Timeout, MaxRetries: providerCfg.MaxRetries,
+			URL: providerConfig.URL, AuthKey: providerConfig.AuthKey,
+			Timeout: providerConfig.Timeout, MaxRetries: providerConfig.MaxRetries,
 		}),
 		domain.NotificationChannelEmail: email.NewEmailProvider(email.EmailClientConfig{
-			URL: providerCfg.URL, AuthKey: providerCfg.AuthKey,
-			Timeout: providerCfg.Timeout, MaxRetries: providerCfg.MaxRetries,
+			URL: providerConfig.URL, AuthKey: providerConfig.AuthKey,
+			Timeout: providerConfig.Timeout, MaxRetries: providerConfig.MaxRetries,
 		}),
 		domain.NotificationChannelPush: push.NewPushProvider(push.PushClientConfig{
-			URL: providerCfg.URL, AuthKey: providerCfg.AuthKey,
-			Timeout: providerCfg.Timeout, MaxRetries: providerCfg.MaxRetries,
+			URL: providerConfig.URL, AuthKey: providerConfig.AuthKey,
+			Timeout: providerConfig.Timeout, MaxRetries: providerConfig.MaxRetries,
 		}),
 	}
 
 	// 6. Repositories
-	c.NotificationRepo = repository.NewNotificationRepository(db)
-	c.TemplateRepo = ntRepository.NewNotificationTemplateRepository(db)
+	container.NotificationRepository = repository.NewNotificationRepository(database)
+	container.NotificationTemplateRepository = ntRepository.NewNotificationTemplateRepository(database)
 
 	// 7. Producer (needs AMQP channel)
-	producerCh, err := rmqConn.Channel()
+	producerChannel, err := rabbitMQConnection.Channel()
 	if err != nil {
 		return nil, fmt.Errorf("failed to create producer channel: %w", err)
 	}
-	c.NotificationProducer = messaging.NewNotificationProducer(producerCh)
+	container.NotificationProducer = messaging.NewNotificationProducer(producerChannel)
 
 	// 8. Services
-	c.TemplateService = ntService.NewNotificationTemplateService(c.TemplateRepo)
-	c.NotificationService = service.NewNotificationService(c.NotificationRepo, c.TemplateService)
-	c.NotificationProcessingService = service.NewNotificationProcessingService(
-		c.NotificationService,
-		c.NotificationProducer,
+	container.NotificationTemplateService = ntService.NewNotificationTemplateService(container.NotificationTemplateRepository)
+	container.NotificationService = service.NewNotificationService(container.NotificationRepository, container.NotificationTemplateService)
+	container.NotificationProcessingService = service.NewNotificationProcessingService(
+		container.NotificationService,
+		container.NotificationProducer,
 		providers,
-		c.NotificationRepo,
+		container.NotificationRepository,
 	)
 
 	// 9. WebSocket Hub
-	c.WSHub = ws.NewNotificationHub()
+	container.WSHub = ws.NewNotificationHub()
 
 	// 10. Metrics
-	c.NotificationMetrics = metrics.NewNotificationMetrics()
+	container.NotificationMetrics = metrics.NewNotificationMetrics()
 
 	// 11. Consumer (needs AMQP channel)
-	consumerCh, err := rmqConn.Channel()
+	consumerChannel, err := rabbitMQConnection.Channel()
 	if err != nil {
 		return nil, fmt.Errorf("failed to create consumer channel: %w", err)
 	}
-	consumerCfg := messaging.NotificationConsumerConfig{
-		Concurrency: cfg.Worker.Concurrency,
-		RateLimit:   cfg.Worker.RateLimit,
-		MaxRetries:  cfg.Worker.MaxRetries,
-		RetryTTL:    cfg.Worker.RetryTTL,
+	consumerConfig := messaging.NotificationConsumerConfig{
+		Concurrency: config.Worker.Concurrency,
+		RateLimit:   config.Worker.RateLimit,
+		MaxRetries:  config.Worker.MaxRetries,
+		RetryTTL:    config.Worker.RetryTTL,
 	}
-	c.NotificationConsumer = messaging.NewNotificationConsumer(
-		c.NotificationProcessingService,
-		consumerCh,
-		c.WSHub,
-		c.NotificationMetrics,
-		consumerCfg,
+	container.NotificationConsumer = messaging.NewNotificationConsumer(
+		container.NotificationProcessingService,
+		consumerChannel,
+		container.WSHub,
+		container.NotificationMetrics,
+		consumerConfig,
 	)
 
 	// 12. Controllers
-	c.NotificationController = controller.NewNotificationController(c.NotificationService, c.NotificationProcessingService)
-	c.TemplateController = ntController.NewNotificationTemplateController(c.TemplateService)
+	container.NotificationController = controller.NewNotificationController(container.NotificationService, container.NotificationProcessingService)
+	container.NotificationTemplateController = ntController.NewNotificationTemplateController(container.NotificationTemplateService)
 
 	// 13. Health check
-	c.HealthService = health.NewHealthService(db, rmqConn)
-	c.HealthController = health.NewHealthController(c.HealthService)
+	container.HealthService = health.NewHealthService(database, rabbitMQConnection)
+	container.HealthController = health.NewHealthController(container.HealthService)
 
 	logger.Info().Msg("all dependencies initialized")
 
-	return c, nil
+	return container, nil
 }
 
 // Close shuts down all dependencies in reverse order.
@@ -197,9 +197,9 @@ func (c *Container) Close() error {
 
 	// Close database
 	if c.DB != nil {
-		sqlDB, err := c.DB.DB()
+		sqlDatabase, err := c.DB.DB()
 		if err == nil {
-			if err := sqlDB.Close(); err != nil {
+			if err := sqlDatabase.Close(); err != nil {
 				logger.Error().Err(err).Msg("failed to close database connection")
 			}
 		}
@@ -211,22 +211,22 @@ func (c *Container) Close() error {
 
 // runMigrations runs database migrations using golang-migrate.
 func runMigrations(db *gorm.DB) error {
-	sqlDB, err := db.DB()
+	sqlDatabase, err := db.DB()
 	if err != nil {
 		return fmt.Errorf("failed to get underlying sql.DB: %w", err)
 	}
 
-	driver, err := migratePostgres.WithInstance(sqlDB, &migratePostgres.Config{})
+	driver, err := migratePostgres.WithInstance(sqlDatabase, &migratePostgres.Config{})
 	if err != nil {
 		return fmt.Errorf("failed to create migrate driver: %w", err)
 	}
 
-	m, err := migrate.NewWithDatabaseInstance("file://migrations", "postgres", driver)
+	migrateInstance, err := migrate.NewWithDatabaseInstance("file://migrations", "postgres", driver)
 	if err != nil {
 		return fmt.Errorf("failed to create migrate instance: %w", err)
 	}
 
-	if err := m.Up(); err != nil && err != migrate.ErrNoChange {
+	if err := migrateInstance.Up(); err != nil && err != migrate.ErrNoChange {
 		return fmt.Errorf("failed to run migrations: %w", err)
 	}
 

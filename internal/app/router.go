@@ -16,41 +16,41 @@ import (
 
 // setupRouter configures the Fiber application with all routes and middleware.
 func (a *App) setupRouter() {
-	app := fiber.New(fiber.Config{
+	fiberApp := fiber.New(fiber.Config{
 		ErrorHandler: globalErrorHandler,
 	})
 
 	// OpenTelemetry middleware — traces ALL HTTP requests automatically.
-	app.Use(otelfiber.Middleware())
+	fiberApp.Use(otelfiber.Middleware())
 
 	// Middlewares
-	middleware.SetupMiddleware(app)
+	middleware.SetupMiddleware(fiberApp)
 
 	// Health
-	a.container.HealthController.RegisterRoutes(app)
+	a.container.HealthController.RegisterRoutes(fiberApp)
 
 	// Metrics
-	app.Get("/metrics", adaptor.HTTPHandler(promhttp.Handler()))
+	fiberApp.Get("/metrics", adaptor.HTTPHandler(promhttp.Handler()))
 
 	// Swagger
-	app.Get("/swagger/*", fiberSwagger.WrapHandler)
+	fiberApp.Get("/swagger/*", fiberSwagger.WrapHandler)
 
 	// WebSocket — upgrade middleware, then handlers
-	app.Use("/ws", func(c *fiber.Ctx) error {
+	fiberApp.Use("/ws", func(c *fiber.Ctx) error {
 		if websocket.IsWebSocketUpgrade(c) {
 			return c.Next()
 		}
 		return fiber.ErrUpgradeRequired
 	})
-	app.Get("/ws/notifications/:id", websocket.New(a.container.WSHub.HandleNotificationWS))
-	app.Get("/ws/notifications/batch/:batchId", websocket.New(a.container.WSHub.HandleBatchWS))
+	fiberApp.Get("/ws/notifications/:id", websocket.New(a.container.WSHub.HandleNotificationWS))
+	fiberApp.Get("/ws/notifications/batch/:batchId", websocket.New(a.container.WSHub.HandleBatchWS))
 
 	// API v1
-	v1 := app.Group("/api/v1")
+	v1 := fiberApp.Group("/api/v1")
 	a.container.NotificationController.RegisterRoutes(v1)
-	a.container.TemplateController.RegisterRoutes(v1)
+	a.container.NotificationTemplateController.RegisterRoutes(v1)
 
-	a.fiber = app
+	a.fiberApp = fiberApp
 }
 
 // globalErrorHandler handles all unhandled errors from Fiber handlers.

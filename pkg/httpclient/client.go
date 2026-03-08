@@ -23,12 +23,12 @@ type client struct {
 	defaultHeaders map[string]string
 }
 
-func NewHTTPClient(cfg HTTPClientConfig) HTTPClient {
+func NewHTTPClient(config HTTPClientConfig) HTTPClient {
 	return &client{
-		httpClient:     &http.Client{Timeout: cfg.Timeout},
-		maxRetries:     cfg.MaxRetries,
-		retryDelay:     cfg.RetryDelay,
-		defaultHeaders: cfg.DefaultHeaders,
+		httpClient:     &http.Client{Timeout: config.Timeout},
+		maxRetries:     config.MaxRetries,
+		retryDelay:     config.RetryDelay,
+		defaultHeaders: config.DefaultHeaders,
 	}
 }
 
@@ -57,32 +57,32 @@ func (c *client) Do(ctx context.Context, method, url string, body interface{}, h
 			}
 		}
 
-		req, err := http.NewRequestWithContext(ctx, method, url, bodyReader)
+		request, err := http.NewRequestWithContext(ctx, method, url, bodyReader)
 		if err != nil {
 			return nil, fmt.Errorf("%w: %v", ErrHTTPRequestFailed, err)
 		}
 
-		req.Header.Set("Content-Type", "application/json")
+		request.Header.Set("Content-Type", "application/json")
 		for k, v := range c.defaultHeaders {
-			req.Header.Set(k, v)
+			request.Header.Set(k, v)
 		}
 		for k, v := range headers {
-			req.Header.Set(k, v)
+			request.Header.Set(k, v)
 		}
 
-		resp, err := c.httpClient.Do(req)
+		response, err := c.httpClient.Do(request)
 		if err != nil {
 			lastErr = fmt.Errorf("%w: %v", ErrHTTPRequestFailed, err)
 			continue
 		}
 
-		if resp.StatusCode >= 500 && attempt < c.maxRetries {
-			resp.Body.Close()
-			lastErr = fmt.Errorf("%w: status %d", ErrHTTPRequestFailed, resp.StatusCode)
+		if response.StatusCode >= 500 && attempt < c.maxRetries {
+			response.Body.Close()
+			lastErr = fmt.Errorf("%w: status %d", ErrHTTPRequestFailed, response.StatusCode)
 			continue
 		}
 
-		return resp, nil
+		return response, nil
 	}
 
 	return nil, fmt.Errorf("%w: %v", ErrHTTPMaxRetries, lastErr)

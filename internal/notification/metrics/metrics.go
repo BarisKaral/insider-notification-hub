@@ -15,7 +15,7 @@ type NotificationMetrics struct {
 
 // NewNotificationMetrics creates and registers Prometheus metrics for notifications.
 func NewNotificationMetrics() *NotificationMetrics {
-	m := &NotificationMetrics{
+	notificationMetrics := &NotificationMetrics{
 		NotificationsTotal: prometheus.NewCounterVec(
 			prometheus.CounterOpts{
 				Name: "notifications_total",
@@ -40,11 +40,11 @@ func NewNotificationMetrics() *NotificationMetrics {
 		),
 	}
 
-	prometheus.MustRegister(m.NotificationsTotal)
-	prometheus.MustRegister(m.ProcessingDuration)
-	prometheus.MustRegister(m.QueueDepth)
+	prometheus.MustRegister(notificationMetrics.NotificationsTotal)
+	prometheus.MustRegister(notificationMetrics.ProcessingDuration)
+	prometheus.MustRegister(notificationMetrics.QueueDepth)
 
-	return m
+	return notificationMetrics
 }
 
 // IncTotal increments the total notifications counter for the given channel and status.

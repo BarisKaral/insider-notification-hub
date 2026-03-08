@@ -13,15 +13,15 @@ type HealthController interface {
 }
 
 type healthController struct {
-	service HealthService
+	healthService HealthService
 }
 
 var _ HealthController = (*healthController)(nil)
 
 // NewHealthController creates a new HealthController.
-func NewHealthController(service HealthService) HealthController {
+func NewHealthController(healthService HealthService) HealthController {
 	return &healthController{
-		service: service,
+		healthService: healthService,
 	}
 }
 
@@ -32,7 +32,7 @@ func (h *healthController) RegisterRoutes(router fiber.Router) {
 
 // Health handles GET /health.
 func (h *healthController) Health(c *fiber.Ctx) error {
-	resp := h.service.Check(c.Context())
+	resp := h.healthService.Check(c.Context())
 	statusCode := http.StatusOK
 	if resp.Status != "healthy" {
 		statusCode = http.StatusServiceUnavailable

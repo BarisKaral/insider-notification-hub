@@ -16,7 +16,7 @@ import (
 // App is the main application struct that holds the DI container and Fiber instance.
 type App struct {
 	container      *Container
-	fiber          *fiber.App
+	fiberApp       *fiber.App
 	cancelFunc     context.CancelFunc
 	tracerProvider *sdktrace.TracerProvider
 }
@@ -24,7 +24,7 @@ type App struct {
 // NewApp creates a new application with all dependencies wired.
 func NewApp(cfg *config.Config) (*App, error) {
 	// Initialise distributed tracing.
-	tp, err := tracer.InitTracer("notification-hub", cfg.Jaeger.Endpoint)
+	tracerProvider, err := tracer.InitTracer("notification-hub", cfg.Jaeger.Endpoint)
 	if err != nil {
 		logger.Error().Err(err).Msg("failed to init tracer, continuing without tracing")
 	}
@@ -34,10 +34,10 @@ func NewApp(cfg *config.Config) (*App, error) {
 		return nil, err
 	}
 
-	a := &App{container: container, tracerProvider: tp}
-	a.setupRouter()
+	application := &App{container: container, tracerProvider: tracerProvider}
+	application.setupRouter()
 
-	return a, nil
+	return application, nil
 }
 
 // Run starts consumers, recovery ticker, and the HTTP server.
@@ -55,7 +55,7 @@ func (a *App) Run() error {
 	a.startRecoveryTicker(ctx)
 
 	// Start HTTP server
-	return a.fiber.Listen(":" + a.container.Config.AppPort)
+	return a.fiberApp.Listen(":" + a.container.Config.AppPort)
 }
 
 // startRecoveryTicker periodically recovers stuck notifications and publishes due scheduled ones.
@@ -87,7 +87,7 @@ func (a *App) Shutdown(timeout time.Duration) error {
 	}
 
 	// Stop HTTP server with timeout
-	if err := a.fiber.ShutdownWithTimeout(timeout); err != nil {
+	if err := a.fiberApp.ShutdownWithTimeout(timeout); err != nil {
 		logger.Error().Err(err).Msg("failed to shutdown fiber")
 	}
 

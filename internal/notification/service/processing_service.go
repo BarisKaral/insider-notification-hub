@@ -24,54 +24,54 @@ type NotificationProcessingService interface {
 }
 
 type notificationProcessingService struct {
-	service   NotificationService
-	producer  NotificationProducer
-	providers map[domain.NotificationChannel]provider.NotificationProvider
-	repo      repository.NotificationRepository
+	notificationService    NotificationService
+	notificationProducer   NotificationProducer
+	providers              map[domain.NotificationChannel]provider.NotificationProvider
+	notificationRepository repository.NotificationRepository
 }
 
 var _ NotificationProcessingService = (*notificationProcessingService)(nil)
 
 // NewNotificationProcessingService creates a new NotificationProcessingService.
 func NewNotificationProcessingService(
-	svc NotificationService,
-	producer NotificationProducer,
+	notificationService NotificationService,
+	notificationProducer NotificationProducer,
 	providers map[domain.NotificationChannel]provider.NotificationProvider,
-	repo repository.NotificationRepository,
+	notificationRepository repository.NotificationRepository,
 ) NotificationProcessingService {
 	return &notificationProcessingService{
-		service:   svc,
-		producer:  producer,
-		providers: providers,
-		repo:      repo,
+		notificationService:    notificationService,
+		notificationProducer:   notificationProducer,
+		providers:              providers,
+		notificationRepository: notificationRepository,
 	}
 }
 
 func (s *notificationProcessingService) Create(ctx context.Context, req domain.NotificationCreateRequest, idempotencyKey *string) (*domain.Notification, error) {
-	n, err := s.service.Create(ctx, req, idempotencyKey)
+	notification, err := s.notificationService.Create(ctx, req, idempotencyKey)
 	if err != nil {
 		return nil, err
 	}
 
-	if n.Status != domain.NotificationStatusScheduled {
-		if err := s.producer.Publish(ctx, n); err != nil {
-			logger.Error().Err(err).Str("notificationID", n.ID.String()).Msg("failed to publish notification")
-			return n, nil
+	if notification.Status != domain.NotificationStatusScheduled {
+		if err := s.notificationProducer.Publish(ctx, notification); err != nil {
+			logger.Error().Err(err).Str("notificationID", notification.ID.String()).Msg("failed to publish notification")
+			return notification, nil
 		}
 
-		if err := s.service.MarkAsQueued(ctx, n.ID); err != nil {
-			logger.Error().Err(err).Str("notificationID", n.ID.String()).Msg("failed to mark notification as queued")
-			return n, nil
+		if err := s.notificationService.MarkAsQueued(ctx, notification.ID); err != nil {
+			logger.Error().Err(err).Str("notificationID", notification.ID.String()).Msg("failed to mark notification as queued")
+			return notification, nil
 		}
 
-		n.Status = domain.NotificationStatusQueued
+		notification.Status = domain.NotificationStatusQueued
 	}
 
-	return n, nil
+	return notification, nil
 }
 
 func (s *notificationProcessingService) CreateBatch(ctx context.Context, req domain.NotificationBatchCreateRequest) ([]*domain.Notification, uuid.UUID, error) {
-	notifications, batchID, err := s.service.CreateBatch(ctx, req)
+	notifications, batchID, err := s.notificationService.CreateBatch(ctx, req)
 	if err != nil {
 		return nil, uuid.Nil, err
 	}
@@ -84,13 +84,13 @@ func (s *notificationProcessingService) CreateBatch(ctx context.Context, req dom
 	}
 
 	if len(toPublish) > 0 {
-		if err := s.producer.PublishBatch(ctx, toPublish); err != nil {
+		if err := s.notificationProducer.PublishBatch(ctx, toPublish); err != nil {
 			logger.Error().Err(err).Str("batchID", batchID.String()).Msg("failed to publish batch notifications")
 			return notifications, batchID, nil
 		}
 
 		for _, n := range toPublish {
-			if err := s.service.MarkAsQueued(ctx, n.ID); err != nil {
+			if err := s.notificationService.MarkAsQueued(ctx, n.ID); err != nil {
 				logger.Error().Err(err).Str("notificationID", n.ID.String()).Msg("failed to mark notification as queued")
 			} else {
 				n.Status = domain.NotificationStatusQueued
@@ -102,82 +102,82 @@ func (s *notificationProcessingService) CreateBatch(ctx context.Context, req dom
 }
 
 func (s *notificationProcessingService) ProcessAndSend(ctx context.Context, id uuid.UUID) (*domain.Notification, bool, error) {
-	n, err := s.service.MarkAsProcessing(ctx, id)
+	notification, err := s.notificationService.MarkAsProcessing(ctx, id)
 	if err != nil {
 		return nil, false, err
 	}
 
-	if n.Status == domain.NotificationStatusCancelled || n.Status == domain.NotificationStatusSent {
-		return n, false, nil
+	if notification.Status == domain.NotificationStatusCancelled || notification.Status == domain.NotificationStatusSent {
+		return notification, false, nil
 	}
 
-	p, ok := s.providers[n.Channel]
+	notificationProvider, ok := s.providers[notification.Channel]
 	if !ok {
-		return nil, false, fmt.Errorf("no provider for channel %s", n.Channel)
+		return nil, false, fmt.Errorf("no provider for channel %s", notification.Channel)
 	}
 
-	resp, err := p.Send(ctx, &provider.ProviderRequest{
-		To:      n.Recipient,
-		Channel: string(n.Channel),
-		Content: n.Content,
+	response, err := notificationProvider.Send(ctx, &provider.ProviderRequest{
+		To:      notification.Recipient,
+		Channel: string(notification.Channel),
+		Content: notification.Content,
 	})
 	if err != nil {
 		return nil, false, err
 	}
 
-	if err := s.service.MarkAsSent(ctx, id, resp.MessageID); err != nil {
+	if err := s.notificationService.MarkAsSent(ctx, id, response.MessageID); err != nil {
 		return nil, false, err
 	}
 
-	n.Status = domain.NotificationStatusSent
-	return n, true, nil
+	notification.Status = domain.NotificationStatusSent
+	return notification, true, nil
 }
 
 func (s *notificationProcessingService) HandleDeliveryFailure(ctx context.Context, id uuid.UUID, retryCount int, maxRetries int) (*domain.Notification, error) {
 	if retryCount < maxRetries {
-		if err := s.service.MarkAsRetrying(ctx, id); err != nil {
+		if err := s.notificationService.MarkAsRetrying(ctx, id); err != nil {
 			return nil, fmt.Errorf("failed to mark as retrying: %w", err)
 		}
 
-		n, err := s.service.GetByID(ctx, id)
+		notification, err := s.notificationService.GetByID(ctx, id)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get notification for retry: %w", err)
 		}
 
 		newRetryCount := int32(retryCount + 1)
-		if err := s.producer.PublishToRetry(ctx, n, newRetryCount); err != nil {
+		if err := s.notificationProducer.PublishToRetry(ctx, notification, newRetryCount); err != nil {
 			return nil, fmt.Errorf("failed to publish to retry: %w", err)
 		}
 
-		return n, nil
+		return notification, nil
 	}
 
-	if err := s.service.MarkAsFailed(ctx, id, "max retries exceeded", retryCount); err != nil {
+	if err := s.notificationService.MarkAsFailed(ctx, id, "max retries exceeded", retryCount); err != nil {
 		return nil, fmt.Errorf("failed to mark as failed: %w", err)
 	}
 
-	n, err := s.service.GetByID(ctx, id)
+	notification, err := s.notificationService.GetByID(ctx, id)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get notification after failure: %w", err)
 	}
 
-	return n, nil
+	return notification, nil
 }
 
 func (s *notificationProcessingService) RecoverStuckNotifications(ctx context.Context) error {
-	notifications, err := s.repo.GetRecoverableNotifications(ctx, 30*time.Second)
+	notifications, err := s.notificationRepository.GetRecoverableNotifications(ctx, 30*time.Second)
 	if err != nil {
 		logger.Error().Err(err).Msg("failed to get recoverable notifications")
 		return nil
 	}
 
 	for _, n := range notifications {
-		if err := s.producer.Publish(ctx, n); err != nil {
+		if err := s.notificationProducer.Publish(ctx, n); err != nil {
 			logger.Error().Err(err).Str("notificationId", n.ID.String()).Msg("failed to publish stuck notification")
 			continue
 		}
 
-		if err := s.service.MarkAsQueued(ctx, n.ID); err != nil {
+		if err := s.notificationService.MarkAsQueued(ctx, n.ID); err != nil {
 			logger.Error().Err(err).Str("notificationId", n.ID.String()).Msg("failed to update stuck notification status")
 			continue
 		}
@@ -189,19 +189,19 @@ func (s *notificationProcessingService) RecoverStuckNotifications(ctx context.Co
 }
 
 func (s *notificationProcessingService) PublishDueScheduled(ctx context.Context) error {
-	notifications, err := s.repo.GetDueScheduledNotifications(ctx)
+	notifications, err := s.notificationRepository.GetDueScheduledNotifications(ctx)
 	if err != nil {
 		logger.Error().Err(err).Msg("failed to get due scheduled notifications")
 		return nil
 	}
 
 	for _, n := range notifications {
-		if err := s.producer.Publish(ctx, n); err != nil {
+		if err := s.notificationProducer.Publish(ctx, n); err != nil {
 			logger.Error().Err(err).Str("notificationId", n.ID.String()).Msg("failed to publish scheduled notification")
 			continue
 		}
 
-		if err := s.service.MarkAsQueued(ctx, n.ID); err != nil {
+		if err := s.notificationService.MarkAsQueued(ctx, n.ID); err != nil {
 			logger.Error().Err(err).Str("notificationId", n.ID.String()).Msg("failed to update scheduled notification status")
 			continue
 		}

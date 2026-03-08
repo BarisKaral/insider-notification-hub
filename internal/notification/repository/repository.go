@@ -28,17 +28,17 @@ type NotificationRepository interface {
 }
 
 type repository struct {
-	db *gorm.DB
+	database *gorm.DB
 }
 
 var _ NotificationRepository = (*repository)(nil)
 
-func NewNotificationRepository(db *gorm.DB) *repository {
-	return &repository{db: db}
+func NewNotificationRepository(database *gorm.DB) *repository {
+	return &repository{database: database}
 }
 
 func (r *repository) Create(ctx context.Context, n *domain.Notification) error {
-	if err := r.db.WithContext(ctx).Create(n).Error; err != nil {
+	if err := r.database.WithContext(ctx).Create(n).Error; err != nil {
 		if isUniqueViolation(err) {
 			return domain.ErrNotificationDuplicateIdempotencyKey.WithError(err)
 		}
@@ -48,7 +48,7 @@ func (r *repository) Create(ctx context.Context, n *domain.Notification) error {
 }
 
 func (r *repository) CreateBatch(ctx context.Context, notifications []*domain.Notification) error {
-	if err := r.db.WithContext(ctx).Create(notifications).Error; err != nil {
+	if err := r.database.WithContext(ctx).Create(notifications).Error; err != nil {
 		if isUniqueViolation(err) {
 			return domain.ErrNotificationDuplicateIdempotencyKey.WithError(err)
 		}
@@ -58,26 +58,26 @@ func (r *repository) CreateBatch(ctx context.Context, notifications []*domain.No
 }
 
 func (r *repository) GetByID(ctx context.Context, id uuid.UUID) (*domain.Notification, error) {
-	var n domain.Notification
-	if err := r.db.WithContext(ctx).Where("id = ?", id).First(&n).Error; err != nil {
+	var notification domain.Notification
+	if err := r.database.WithContext(ctx).Where("id = ?", id).First(&notification).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, domain.ErrNotificationNotFound
 		}
 		return nil, domain.ErrNotificationNotFound.WithError(err)
 	}
-	return &n, nil
+	return &notification, nil
 }
 
 func (r *repository) GetByBatchID(ctx context.Context, batchID uuid.UUID) ([]*domain.Notification, error) {
 	var notifications []*domain.Notification
-	if err := r.db.WithContext(ctx).Where("batch_id = ?", batchID).Find(&notifications).Error; err != nil {
+	if err := r.database.WithContext(ctx).Where("batch_id = ?", batchID).Find(&notifications).Error; err != nil {
 		return nil, domain.ErrNotificationNotFound.WithError(err)
 	}
 	return notifications, nil
 }
 
 func (r *repository) List(ctx context.Context, filter domain.NotificationListFilter) ([]*domain.Notification, int64, error) {
-	query := r.db.WithContext(ctx).Model(&domain.Notification{})
+	query := r.database.WithContext(ctx).Model(&domain.Notification{})
 
 	if filter.Status != "" {
 		query = query.Where("status = ?", filter.Status)
@@ -106,34 +106,34 @@ func (r *repository) List(ctx context.Context, filter domain.NotificationListFil
 }
 
 func (r *repository) Update(ctx context.Context, n *domain.Notification) error {
-	return r.db.WithContext(ctx).Save(n).Error
+	return r.database.WithContext(ctx).Save(n).Error
 }
 
 func (r *repository) GetByIdempotencyKey(ctx context.Context, key string) (*domain.Notification, error) {
-	var n domain.Notification
-	if err := r.db.WithContext(ctx).Where("idempotency_key = ?", key).First(&n).Error; err != nil {
+	var notification domain.Notification
+	if err := r.database.WithContext(ctx).Where("idempotency_key = ?", key).First(&notification).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, nil
 		}
 		return nil, err
 	}
-	return &n, nil
+	return &notification, nil
 }
 
 // GetForProcessing retrieves a notification with a row-level lock (SELECT FOR UPDATE)
 // to prevent duplicate processing by concurrent consumers.
 func (r *repository) GetForProcessing(ctx context.Context, id uuid.UUID) (*domain.Notification, error) {
-	var n domain.Notification
-	if err := r.db.WithContext(ctx).
+	var notification domain.Notification
+	if err := r.database.WithContext(ctx).
 		Clauses(clause.Locking{Strength: "UPDATE"}).
 		Where("id = ?", id).
-		First(&n).Error; err != nil {
+		First(&notification).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, domain.ErrNotificationNotFound
 		}
 		return nil, domain.ErrNotificationNotFound.WithError(err)
 	}
-	return &n, nil
+	return &notification, nil
 }
 
 // GetRecoverableNotifications finds notifications stuck in pending state
@@ -141,7 +141,7 @@ func (r *repository) GetForProcessing(ctx context.Context, id uuid.UUID) (*domai
 func (r *repository) GetRecoverableNotifications(ctx context.Context, staleDuration time.Duration) ([]*domain.Notification, error) {
 	var notifications []*domain.Notification
 	cutoff := time.Now().UTC().Add(-staleDuration)
-	if err := r.db.WithContext(ctx).
+	if err := r.database.WithContext(ctx).
 		Where("status = ? AND created_at < ?", domain.NotificationStatusPending, cutoff).
 		Find(&notifications).Error; err != nil {
 		return nil, err
@@ -152,7 +152,7 @@ func (r *repository) GetRecoverableNotifications(ctx context.Context, staleDurat
 // GetDueScheduledNotifications finds scheduled notifications whose scheduled_at time has passed.
 func (r *repository) GetDueScheduledNotifications(ctx context.Context) ([]*domain.Notification, error) {
 	var notifications []*domain.Notification
-	if err := r.db.WithContext(ctx).
+	if err := r.database.WithContext(ctx).
 		Where("status = ? AND scheduled_at <= ?", domain.NotificationStatusScheduled, time.Now().UTC()).
 		Find(&notifications).Error; err != nil {
 		return nil, err

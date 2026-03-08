@@ -34,11 +34,11 @@ type NotificationConsumerConfig struct {
 }
 
 type notificationConsumer struct {
-	processingService service.NotificationProcessingService
-	channel           *amqp.Channel
-	wsHub             ws.StatusBroadcaster
-	metrics           *metrics.NotificationMetrics
-	config            NotificationConsumerConfig
+	notificationProcessingService service.NotificationProcessingService
+	amqpChannel                   *amqp.Channel
+	statusBroadcaster             ws.StatusBroadcaster
+	notificationMetrics           *metrics.NotificationMetrics
+	consumerConfig                NotificationConsumerConfig
 }
 
 var _ NotificationConsumer = (*notificationConsumer)(nil)
@@ -54,24 +54,24 @@ type consumerPayload struct {
 
 // NewNotificationConsumer creates a new consumer that processes notifications from RabbitMQ.
 func NewNotificationConsumer(
-	processingSvc service.NotificationProcessingService,
-	ch *amqp.Channel,
-	wsHub ws.StatusBroadcaster,
-	m *metrics.NotificationMetrics,
-	cfg NotificationConsumerConfig,
+	notificationProcessingService service.NotificationProcessingService,
+	amqpChannel *amqp.Channel,
+	statusBroadcaster ws.StatusBroadcaster,
+	notificationMetrics *metrics.NotificationMetrics,
+	consumerConfig NotificationConsumerConfig,
 ) NotificationConsumer {
 	return &notificationConsumer{
-		processingService: processingSvc,
-		channel:           ch,
-		wsHub:             wsHub,
-		metrics:           m,
-		config:            cfg,
+		notificationProcessingService: notificationProcessingService,
+		amqpChannel:                   amqpChannel,
+		statusBroadcaster:             statusBroadcaster,
+		notificationMetrics:           notificationMetrics,
+		consumerConfig:                consumerConfig,
 	}
 }
 
 // Start begins consuming from main and DLQ queues for all channels.
 func (c *notificationConsumer) Start(ctx context.Context) error {
-	if err := c.channel.Qos(c.config.Concurrency, 0, false); err != nil {
+	if err := c.amqpChannel.Qos(c.consumerConfig.Concurrency, 0, false); err != nil {
 		return fmt.Errorf("failed to set QoS: %w", err)
 	}
 
@@ -89,14 +89,14 @@ func (c *notificationConsumer) Start(ctx context.Context) error {
 
 // Stop closes the underlying AMQP channel.
 func (c *notificationConsumer) Stop() error {
-	return c.channel.Close()
+	return c.amqpChannel.Close()
 }
 
 func (c *notificationConsumer) startMainConsumer(ctx context.Context, channel string) error {
 	queueName := fmt.Sprintf("notification.queue.%s", channel)
 	consumerTag := fmt.Sprintf("main-%s", channel)
 
-	deliveries, err := c.channel.Consume(
+	deliveries, err := c.amqpChannel.Consume(
 		queueName,   // queue
 		consumerTag, // consumer tag
 		false,       // autoAck
@@ -109,16 +109,16 @@ func (c *notificationConsumer) startMainConsumer(ctx context.Context, channel st
 		return fmt.Errorf("failed to start consuming from %s: %w", queueName, err)
 	}
 
-	limiter := rate.NewLimiter(rate.Limit(c.config.RateLimit), c.config.RateLimit)
+	limiter := rate.NewLimiter(rate.Limit(c.consumerConfig.RateLimit), c.consumerConfig.RateLimit)
 
-	for i := 0; i < c.config.Concurrency; i++ {
+	for i := 0; i < c.consumerConfig.Concurrency; i++ {
 		go c.processMainMessages(ctx, deliveries, limiter, channel)
 	}
 
 	logger.Info().
 		Str("queue", queueName).
-		Int("concurrency", c.config.Concurrency).
-		Int("rateLimit", c.config.RateLimit).
+		Int("concurrency", c.consumerConfig.Concurrency).
+		Int("rateLimit", c.consumerConfig.RateLimit).
 		Msg("main consumer started")
 
 	return nil
@@ -172,7 +172,7 @@ func (c *notificationConsumer) handleMainMessage(ctx context.Context, msg amqp.D
 		attribute.String("notification.channel", channel),
 	)
 
-	n, sent, err := c.processingService.ProcessAndSend(ctx, id)
+	notification, sent, err := c.notificationProcessingService.ProcessAndSend(ctx, id)
 	if err != nil {
 		logger.Error().Err(err).Str("notificationID", id.String()).Msg("failed to process notification")
 		_ = msg.Nack(false, false)
@@ -182,18 +182,18 @@ func (c *notificationConsumer) handleMainMessage(ctx context.Context, msg amqp.D
 	if !sent {
 		logger.Info().
 			Str("notificationID", id.String()).
-			Str("status", string(n.Status)).
+			Str("status", string(notification.Status)).
 			Msg("skipping notification, already terminal")
 		_ = msg.Ack(false)
 		return
 	}
 
-	if c.metrics != nil {
-		c.metrics.IncTotal(channel, string(domain.NotificationStatusSent))
-		c.metrics.ObserveDuration(channel, time.Since(start))
+	if c.notificationMetrics != nil {
+		c.notificationMetrics.IncTotal(channel, string(domain.NotificationStatusSent))
+		c.notificationMetrics.ObserveDuration(channel, time.Since(start))
 	}
 
-	c.broadcastStatus(n, string(domain.NotificationStatusSent))
+	c.broadcastStatus(notification, string(domain.NotificationStatusSent))
 
 	_ = msg.Ack(false)
 
@@ -206,7 +206,7 @@ func (c *notificationConsumer) startDLQConsumer(ctx context.Context, channel str
 	queueName := fmt.Sprintf("notification.dlq.%s", channel)
 	consumerTag := fmt.Sprintf("dlq-%s", channel)
 
-	deliveries, err := c.channel.Consume(
+	deliveries, err := c.amqpChannel.Consume(
 		queueName,   // queue
 		consumerTag, // consumer tag
 		false,       // autoAck
@@ -266,18 +266,18 @@ func (c *notificationConsumer) handleDLQMessage(ctx context.Context, msg amqp.De
 		}
 	}
 
-	n, err := c.processingService.HandleDeliveryFailure(ctx, id, int(retryCount), c.config.MaxRetries)
+	notification, err := c.notificationProcessingService.HandleDeliveryFailure(ctx, id, int(retryCount), c.consumerConfig.MaxRetries)
 	if err != nil {
 		logger.Error().Err(err).Str("notificationID", id.String()).Msg("failed to handle delivery failure")
 		_ = msg.Nack(false, false)
 		return
 	}
 
-	if n.Status == domain.NotificationStatusFailed {
-		if c.metrics != nil {
-			c.metrics.IncTotal(channel, string(domain.NotificationStatusFailed))
+	if notification.Status == domain.NotificationStatusFailed {
+		if c.notificationMetrics != nil {
+			c.notificationMetrics.IncTotal(channel, string(domain.NotificationStatusFailed))
 		}
-		c.broadcastStatus(n, string(domain.NotificationStatusFailed))
+		c.broadcastStatus(notification, string(domain.NotificationStatusFailed))
 
 		logger.Info().
 			Str("notificationID", id.String()).
@@ -293,14 +293,14 @@ func (c *notificationConsumer) handleDLQMessage(ctx context.Context, msg amqp.De
 	_ = msg.Ack(false)
 }
 
-func (c *notificationConsumer) broadcastStatus(n *domain.Notification, status string) {
-	if c.wsHub == nil {
+func (c *notificationConsumer) broadcastStatus(notification *domain.Notification, status string) {
+	if c.statusBroadcaster == nil {
 		return
 	}
 	var batchID *string
-	if n.BatchID != nil {
-		s := n.BatchID.String()
+	if notification.BatchID != nil {
+		s := notification.BatchID.String()
 		batchID = &s
 	}
-	c.wsHub.Broadcast(n.ID.String(), batchID, status)
+	c.statusBroadcaster.Broadcast(notification.ID.String(), batchID, status)
 }
