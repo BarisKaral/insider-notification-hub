@@ -1,0 +1,14 @@
+{
+  "Servers": {
+    "1": {
+      "Name": "Notification Hub DB",
+      "Group": "Servers",
+      "Host": "postgres",
+      "Port": 5432,
+      "MaintenanceDB": "notificationdb",
+      "Username": "user",
+      "SSLMode": "prefer",
+      "PassFile": "/tmp/pgpassfile"
+    }
+  }
+}
