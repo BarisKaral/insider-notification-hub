@@ -1,0 +1,386 @@
+{
+	"info": {
+		"name": "Notification Hub",
+		"description": "Event-driven notification system API collection.\n\nChannels: SMS, Email, Push\nFeatures: Batch, Templates, Scheduling, Idempotency, WebSocket",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"variable": [
+		{
+			"key": "baseUrl",
+			"value": "http://localhost:8080",
+			"type": "string"
+		},
+		{
+			"key": "notificationId",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "batchId",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "templateId",
+			"value": "",
+			"type": "string"
+		}
+	],
+	"item": [
+		{
+			"name": "Notifications",
+			"item": [
+				{
+					"name": "Create Notification",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"if (pm.response.code === 201) {",
+									"    var jsonData = pm.response.json();",
+									"    if (jsonData.data && jsonData.data.id) {",
+									"        pm.collectionVariables.set('notificationId', jsonData.data.id);",
+									"    }",
+									"}"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "X-Idempotency-Key",
+								"value": "{{$guid}}",
+								"description": "Optional. Server generates UUID if absent.",
+								"disabled": true
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"recipient\": \"+905551234567\",\n  \"channel\": \"sms\",\n  \"content\": \"Hello, your order has been shipped!\",\n  \"priority\": \"high\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/notifications",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "notifications"]
+						},
+						"description": "Create a single notification.\n\nProvide either `content` or `templateId` + `variables` (not both).\n\nOptional fields:\n- `priority`: high, normal (default), low\n- `scheduledAt`: ISO8601 for future delivery\n- `X-Idempotency-Key` header: for deduplication (409 on duplicate)"
+					}
+				},
+				{
+					"name": "Create Notification (with Template)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"recipient\": \"user@example.com\",\n  \"channel\": \"email\",\n  \"templateId\": \"{{templateId}}\",\n  \"variables\": {\n    \"name\": \"Baris\",\n    \"orderId\": \"12345\"\n  }\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/notifications",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "notifications"]
+						},
+						"description": "Create a notification using a template. The template content will be rendered with the provided variables."
+					}
+				},
+				{
+					"name": "Create Notification (Scheduled)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"recipient\": \"+905551234567\",\n  \"channel\": \"sms\",\n  \"content\": \"Scheduled reminder message\",\n  \"scheduledAt\": \"2026-03-09T10:00:00Z\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/notifications",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "notifications"]
+						},
+						"description": "Create a notification scheduled for future delivery. The recovery ticker will publish it to the queue when the time arrives."
+					}
+				},
+				{
+					"name": "Create Batch",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"if (pm.response.code === 201) {",
+									"    var jsonData = pm.response.json();",
+									"    if (jsonData.data && jsonData.data.batchId) {",
+									"        pm.collectionVariables.set('batchId', jsonData.data.batchId);",
+									"    }",
+									"}"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"notifications\": [\n    {\n      \"recipient\": \"+905551234567\",\n      \"channel\": \"sms\",\n      \"content\": \"Batch message 1\",\n      \"priority\": \"high\"\n    },\n    {\n      \"recipient\": \"user@example.com\",\n      \"channel\": \"email\",\n      \"content\": \"Batch message 2\"\n    },\n    {\n      \"recipient\": \"device-token-abc\",\n      \"channel\": \"push\",\n      \"content\": \"Batch message 3\",\n      \"priority\": \"low\"\n    }\n  ]\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/notifications/batch",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "notifications", "batch"]
+						},
+						"description": "Create up to 1000 notifications in a single batch. All notifications share the same batchId."
+					}
+				},
+				{
+					"name": "Get Notification",
+					"request": {
+						"method": "GET",
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/notifications/{{notificationId}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "notifications", "{{notificationId}}"]
+						},
+						"description": "Get a single notification by ID."
+					}
+				},
+				{
+					"name": "Get Batch",
+					"request": {
+						"method": "GET",
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/notifications/batch/{{batchId}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "notifications", "batch", "{{batchId}}"]
+						},
+						"description": "Get all notifications in a batch."
+					}
+				},
+				{
+					"name": "List Notifications",
+					"request": {
+						"method": "GET",
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/notifications?limit=20&offset=0",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "notifications"],
+							"query": [
+								{
+									"key": "status",
+									"value": "sent",
+									"description": "Filter: pending, queued, processing, sent, failed, retrying, cancelled, scheduled",
+									"disabled": true
+								},
+								{
+									"key": "channel",
+									"value": "sms",
+									"description": "Filter: sms, email, push",
+									"disabled": true
+								},
+								{
+									"key": "startDate",
+									"value": "2026-03-01T00:00:00Z",
+									"description": "Filter: ISO8601 start date",
+									"disabled": true
+								},
+								{
+									"key": "endDate",
+									"value": "2026-03-31T23:59:59Z",
+									"description": "Filter: ISO8601 end date",
+									"disabled": true
+								},
+								{
+									"key": "limit",
+									"value": "20",
+									"description": "Pagination: max 100, default 20"
+								},
+								{
+									"key": "offset",
+									"value": "0",
+									"description": "Pagination: default 0"
+								}
+							]
+						},
+						"description": "List notifications with optional filtering and pagination."
+					}
+				},
+				{
+					"name": "Cancel Notification",
+					"request": {
+						"method": "PATCH",
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/notifications/{{notificationId}}/cancel",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "notifications", "{{notificationId}}", "cancel"]
+						},
+						"description": "Cancel a notification. Only works for: pending, scheduled, queued, failed statuses."
+					}
+				}
+			]
+		},
+		{
+			"name": "Templates",
+			"item": [
+				{
+					"name": "Create Template",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"if (pm.response.code === 201) {",
+									"    var jsonData = pm.response.json();",
+									"    if (jsonData.data && jsonData.data.id) {",
+									"        pm.collectionVariables.set('templateId', jsonData.data.id);",
+									"    }",
+									"}"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"order_shipped\",\n  \"channel\": \"sms\",\n  \"content\": \"Merhaba {{name}}, siparis {{orderId}} kargoya verildi.\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/notification-templates",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "notification-templates"]
+						},
+						"description": "Create a notification template. Use {{variable}} syntax for dynamic content."
+					}
+				},
+				{
+					"name": "Get Template",
+					"request": {
+						"method": "GET",
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/notification-templates/{{templateId}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "notification-templates", "{{templateId}}"]
+						},
+						"description": "Get a single template by ID."
+					}
+				},
+				{
+					"name": "List Templates",
+					"request": {
+						"method": "GET",
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/notification-templates?limit=20&offset=0",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "notification-templates"],
+							"query": [
+								{
+									"key": "limit",
+									"value": "20"
+								},
+								{
+									"key": "offset",
+									"value": "0"
+								}
+							]
+						},
+						"description": "List all templates with pagination."
+					}
+				},
+				{
+					"name": "Update Template",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"order_shipped_v2\",\n  \"channel\": \"sms\",\n  \"content\": \"Merhaba {{name}}, {{orderId}} numarali siparisiz yola cikti!\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/notification-templates/{{templateId}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "notification-templates", "{{templateId}}"]
+						},
+						"description": "Update an existing template."
+					}
+				},
+				{
+					"name": "Delete Template",
+					"request": {
+						"method": "DELETE",
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/notification-templates/{{templateId}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "notification-templates", "{{templateId}}"]
+						},
+						"description": "Soft delete a template."
+					}
+				}
+			]
+		},
+		{
+			"name": "Health & Monitoring",
+			"item": [
+				{
+					"name": "Health Check",
+					"request": {
+						"method": "GET",
+						"url": {
+							"raw": "{{baseUrl}}/health",
+							"host": ["{{baseUrl}}"],
+							"path": ["health"]
+						},
+						"description": "Check application health. Returns database and RabbitMQ connection status."
+					}
+				},
+				{
+					"name": "Prometheus Metrics",
+					"request": {
+						"method": "GET",
+						"url": {
+							"raw": "{{baseUrl}}/metrics",
+							"host": ["{{baseUrl}}"],
+							"path": ["metrics"]
+						},
+						"description": "Prometheus metrics endpoint.\n\nKey metrics:\n- notifications_total (counter)\n- notifications_processing_duration_seconds (histogram)\n- queue_depth (gauge)"
+					}
+				}
+			]
+		}
+	]
+}
