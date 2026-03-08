@@ -36,12 +36,13 @@ type Container struct {
 	RabbitMQ rabbitmq.RabbitMQConnection
 
 	// Notification domain
-	NotificationRepo       repository.NotificationRepository
-	NotificationService    service.NotificationService
-	NotificationProducer   service.NotificationProducer
-	NotificationConsumer   messaging.NotificationConsumer
-	NotificationController controller.NotificationController
-	NotificationMetrics    *metrics.NotificationMetrics
+	NotificationRepo              repository.NotificationRepository
+	NotificationService           service.NotificationService
+	NotificationProcessingService service.NotificationProcessingService
+	NotificationProducer          service.NotificationProducer
+	NotificationConsumer          messaging.NotificationConsumer
+	NotificationController        controller.NotificationController
+	NotificationMetrics           *metrics.NotificationMetrics
 
 	// Template domain
 	TemplateRepo       ntRepository.NotificationTemplateRepository
@@ -133,6 +134,11 @@ func NewContainer(cfg *config.Config) (*Container, error) {
 	// 8. Services
 	c.TemplateService = ntService.NewNotificationTemplateService(c.TemplateRepo)
 	c.NotificationService = service.NewNotificationService(c.NotificationRepo, c.TemplateService, c.NotificationProducer)
+	c.NotificationProcessingService = service.NewNotificationProcessingService(
+		c.NotificationService,
+		c.NotificationProducer,
+		providers,
+	)
 
 	// 9. WebSocket Hub
 	c.WSHub = ws.NewNotificationHub()
@@ -152,8 +158,7 @@ func NewContainer(cfg *config.Config) (*Container, error) {
 		RetryTTL:    cfg.Worker.RetryTTL,
 	}
 	c.NotificationConsumer = messaging.NewNotificationConsumer(
-		c.NotificationService,
-		providers,
+		c.NotificationProcessingService,
 		consumerCh,
 		c.WSHub,
 		c.NotificationMetrics,
@@ -161,7 +166,7 @@ func NewContainer(cfg *config.Config) (*Container, error) {
 	)
 
 	// 12. Controllers
-	c.NotificationController = controller.NewNotificationController(c.NotificationService, c.NotificationProducer)
+	c.NotificationController = controller.NewNotificationController(c.NotificationService, c.NotificationProcessingService)
 	c.TemplateController = ntController.NewNotificationTemplateController(c.TemplateService)
 
 	// 13. Health check

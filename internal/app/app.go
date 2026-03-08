@@ -68,10 +68,10 @@ func (a *App) startRecoveryTicker(ctx context.Context) {
 				ticker.Stop()
 				return
 			case <-ticker.C:
-				if err := a.container.NotificationService.RecoverStuckNotifications(ctx); err != nil {
+				if err := a.container.NotificationProcessingService.RecoverStuckNotifications(ctx); err != nil {
 					logger.Error().Err(err).Msg("recovery ticker: failed to recover stuck notifications")
 				}
-				if err := a.container.NotificationService.PublishDueScheduled(ctx); err != nil {
+				if err := a.container.NotificationProcessingService.PublishDueScheduled(ctx); err != nil {
 					logger.Error().Err(err).Msg("recovery ticker: failed to publish due scheduled notifications")
 				}
 			}
