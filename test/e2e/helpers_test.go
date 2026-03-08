@@ -96,6 +96,14 @@ type templateResponse struct {
 	UpdatedAt string `json:"updatedAt"`
 }
 
+// templatePaginatedResponse matches the template list endpoint response.
+type templatePaginatedResponse struct {
+	Items  []templateResponse `json:"items"`
+	Total  int64              `json:"total"`
+	Limit  int                `json:"limit"`
+	Offset int                `json:"offset"`
+}
+
 // makeRequest sends an HTTP request and returns the response.
 // body can be nil for requests without a payload.
 func makeRequest(method, path string, body interface{}, headers ...map[string]string) (*http.Response, error) {
