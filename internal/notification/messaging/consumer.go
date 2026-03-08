@@ -226,6 +226,13 @@ func (c *notificationConsumer) processDLQMessages(ctx context.Context, deliverie
 }
 
 func (c *notificationConsumer) handleDLQMessage(ctx context.Context, msg amqp.Delivery, channel string) {
+	// Extract trace context propagated from the producer via AMQP headers.
+	propagator := otel.GetTextMapPropagator()
+	ctx = propagator.Extract(ctx, amqpHeaderCarrier(msg.Headers))
+
+	ctx, span := otel.Tracer("notification-hub").Start(ctx, fmt.Sprintf("consumer.dlq.%s", channel))
+	defer span.End()
+
 	var payload consumerPayload
 	if err := json.Unmarshal(msg.Body, &payload); err != nil {
 		logger.Error().Err(err).Str("channel", channel).Msg("failed to unmarshal DLQ message")

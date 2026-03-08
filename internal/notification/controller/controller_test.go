@@ -390,7 +390,7 @@ func TestController_CreateBatch_Success(t *testing.T) {
 	processingSvc.On("CreateBatch", mock.Anything, mock.AnythingOfType("domain.NotificationBatchCreateRequest")).
 		Return(notifications, batchID, nil)
 
-	body := `{"notifications":[{"recipient":"+111","channel":"sms","content":"Hello 1"},{"recipient":"+222","channel":"sms","content":"Hello 2"}]}`
+	body := `{"notifications":[{"recipient":"+905551111111","channel":"sms","content":"Hello 1"},{"recipient":"+905552222222","channel":"sms","content":"Hello 2"}]}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/notifications/batch", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
@@ -454,7 +454,7 @@ func TestController_CreateBatch_MixedScheduledAndPending(t *testing.T) {
 	processingSvc.On("CreateBatch", mock.Anything, mock.AnythingOfType("domain.NotificationBatchCreateRequest")).
 		Return(notifications, batchID, nil)
 
-	body := fmt.Sprintf(`{"notifications":[{"recipient":"+111","channel":"sms","content":"Hello 1"},{"recipient":"+222","channel":"sms","content":"Scheduled","scheduledAt":"%s"}]}`, futureTime.Format(time.RFC3339Nano))
+	body := fmt.Sprintf(`{"notifications":[{"recipient":"+905551111111","channel":"sms","content":"Hello 1"},{"recipient":"+905552222222","channel":"sms","content":"Scheduled","scheduledAt":"%s"}]}`, futureTime.Format(time.RFC3339Nano))
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/notifications/batch", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 
