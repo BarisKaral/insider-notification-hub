@@ -11,7 +11,6 @@ import (
 	"github.com/baris/notification-hub/internal/notification/domain"
 	"github.com/baris/notification-hub/internal/notification/service"
 	"github.com/baris/notification-hub/pkg/errs"
-	"github.com/baris/notification-hub/pkg/logger"
 	"github.com/baris/notification-hub/pkg/response"
 )
 
@@ -27,17 +26,17 @@ type NotificationController interface {
 }
 
 type notificationController struct {
-	service  service.NotificationService
-	producer service.NotificationProducer
+	service           service.NotificationService
+	processingService service.NotificationProcessingService
 }
 
 var _ NotificationController = (*notificationController)(nil)
 
 // NewNotificationController creates a new NotificationController.
-func NewNotificationController(svc service.NotificationService, producer service.NotificationProducer) NotificationController {
+func NewNotificationController(svc service.NotificationService, processingSvc service.NotificationProcessingService) NotificationController {
 	return &notificationController{
-		service:  svc,
-		producer: producer,
+		service:           svc,
+		processingService: processingSvc,
 	}
 }
 
@@ -87,26 +86,12 @@ func (h *notificationController) Create(c *fiber.Ctx) error {
 		return response.Error(c, http.StatusBadRequest, "VALIDATION_ERROR", err.Error())
 	}
 
-	// Create notification via service.
-	n, err := h.service.Create(ctx, req, idempotencyKey)
+	n, err := h.processingService.Create(ctx, req, idempotencyKey)
 	if err != nil {
 		if appErr, ok := err.(*errs.AppError); ok {
 			return response.AppError(c, appErr)
 		}
 		return response.Error(c, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to create notification")
-	}
-
-	// If not scheduled, publish to queue.
-	if n.Status != domain.NotificationStatusScheduled {
-		if err := h.producer.Publish(ctx, n); err != nil {
-			logger.Error().Err(err).Str("notificationID", n.ID.String()).Msg("failed to publish notification")
-		} else {
-			if err := h.service.MarkAsQueued(ctx, n.ID); err != nil {
-				logger.Error().Err(err).Str("notificationID", n.ID.String()).Msg("failed to mark notification as queued")
-			} else {
-				n.Status = domain.NotificationStatusQueued
-			}
-		}
 	}
 
 	return response.Success(c, http.StatusCreated, domain.ToNotificationResponse(n))
@@ -140,35 +125,12 @@ func (h *notificationController) CreateBatch(c *fiber.Ctx) error {
 		return response.Error(c, http.StatusBadRequest, "VALIDATION_ERROR", err.Error())
 	}
 
-	// Create batch via service.
-	notifications, batchID, err := h.service.CreateBatch(ctx, req)
+	notifications, batchID, err := h.processingService.CreateBatch(ctx, req)
 	if err != nil {
 		if appErr, ok := err.(*errs.AppError); ok {
 			return response.AppError(c, appErr)
 		}
 		return response.Error(c, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to create batch")
-	}
-
-	// Filter non-scheduled notifications and publish.
-	var toPublish []*domain.Notification
-	for _, n := range notifications {
-		if n.Status != domain.NotificationStatusScheduled {
-			toPublish = append(toPublish, n)
-		}
-	}
-
-	if len(toPublish) > 0 {
-		if err := h.producer.PublishBatch(ctx, toPublish); err != nil {
-			logger.Error().Err(err).Str("batchID", batchID.String()).Msg("failed to publish batch notifications")
-		} else {
-			for _, n := range toPublish {
-				if err := h.service.MarkAsQueued(ctx, n.ID); err != nil {
-					logger.Error().Err(err).Str("notificationID", n.ID.String()).Msg("failed to mark notification as queued")
-				} else {
-					n.Status = domain.NotificationStatusQueued
-				}
-			}
-		}
 	}
 
 	return response.Success(c, http.StatusCreated, domain.NotificationBatchResponse{

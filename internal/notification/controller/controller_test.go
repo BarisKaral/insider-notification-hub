@@ -114,32 +114,59 @@ func (m *mockNotificationService) PublishDueScheduled(ctx context.Context) error
 	return args.Error(0)
 }
 
-// --- Producer Mock ---
+// --- Processing Service Mock ---
 
-type mockNotificationProducer struct {
+type mockNotificationProcessingService struct {
 	mock.Mock
 }
 
-func (m *mockNotificationProducer) Publish(ctx context.Context, n *domain.Notification) error {
-	args := m.Called(ctx, n)
+func (m *mockNotificationProcessingService) Create(ctx context.Context, req domain.NotificationCreateRequest, idempotencyKey *string) (*domain.Notification, error) {
+	args := m.Called(ctx, req, idempotencyKey)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*domain.Notification), args.Error(1)
+}
+
+func (m *mockNotificationProcessingService) CreateBatch(ctx context.Context, req domain.NotificationBatchCreateRequest) ([]*domain.Notification, uuid.UUID, error) {
+	args := m.Called(ctx, req)
+	if args.Get(0) == nil {
+		return nil, args.Get(1).(uuid.UUID), args.Error(2)
+	}
+	return args.Get(0).([]*domain.Notification), args.Get(1).(uuid.UUID), args.Error(2)
+}
+
+func (m *mockNotificationProcessingService) ProcessAndSend(ctx context.Context, id uuid.UUID) (*domain.Notification, bool, error) {
+	args := m.Called(ctx, id)
+	if args.Get(0) == nil {
+		return nil, args.Bool(1), args.Error(2)
+	}
+	return args.Get(0).(*domain.Notification), args.Bool(1), args.Error(2)
+}
+
+func (m *mockNotificationProcessingService) HandleDeliveryFailure(ctx context.Context, id uuid.UUID, retryCount int, maxRetries int) (*domain.Notification, error) {
+	args := m.Called(ctx, id, retryCount, maxRetries)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*domain.Notification), args.Error(1)
+}
+
+func (m *mockNotificationProcessingService) RecoverStuckNotifications(ctx context.Context) error {
+	args := m.Called(ctx)
 	return args.Error(0)
 }
 
-func (m *mockNotificationProducer) PublishBatch(ctx context.Context, notifications []*domain.Notification) error {
-	args := m.Called(ctx, notifications)
-	return args.Error(0)
-}
-
-func (m *mockNotificationProducer) PublishToRetry(ctx context.Context, n *domain.Notification, retryCount int32) error {
-	args := m.Called(ctx, n, retryCount)
+func (m *mockNotificationProcessingService) PublishDueScheduled(ctx context.Context) error {
+	args := m.Called(ctx)
 	return args.Error(0)
 }
 
 // --- Helpers ---
 
-func setupTestApp(svc *mockNotificationService, prod *mockNotificationProducer) *fiber.App {
+func setupTestApp(svc *mockNotificationService, processingSvc *mockNotificationProcessingService) *fiber.App {
 	app := fiber.New()
-	handler := NewNotificationController(svc, prod)
+	handler := NewNotificationController(svc, processingSvc)
 	handler.RegisterRoutes(app.Group("/api/v1"))
 	return app
 }
@@ -156,24 +183,20 @@ func parseAPIResponse(t *testing.T, body io.Reader) response.APIResponse {
 
 func TestController_Create_Success(t *testing.T) {
 	svc := new(mockNotificationService)
-	prod := new(mockNotificationProducer)
-	app := setupTestApp(svc, prod)
+	processingSvc := new(mockNotificationProcessingService)
+	app := setupTestApp(svc, processingSvc)
 
 	notifID := uuid.New()
-	content := "Hello World"
 
-	svc.On("Create", mock.Anything, mock.AnythingOfType("domain.NotificationCreateRequest"), (*string)(nil)).
+	processingSvc.On("Create", mock.Anything, mock.AnythingOfType("domain.NotificationCreateRequest"), (*string)(nil)).
 		Return(&domain.Notification{
 			ID:        notifID,
 			Recipient: "+1234567890",
 			Channel:   domain.NotificationChannelSMS,
-			Content:   content,
+			Content:   "Hello World",
 			Priority:  domain.NotificationPriorityNormal,
-			Status:    domain.NotificationStatusPending,
+			Status:    domain.NotificationStatusQueued,
 		}, nil)
-
-	prod.On("Publish", mock.Anything, mock.AnythingOfType("*domain.Notification")).Return(nil)
-	svc.On("MarkAsQueued", mock.Anything, notifID).Return(nil)
 
 	body := `{"recipient":"+1234567890","channel":"sms","content":"Hello World"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/notifications", bytes.NewBufferString(body))
@@ -194,28 +217,24 @@ func TestController_Create_Success(t *testing.T) {
 	assert.Equal(t, notifID, notifResp.ID)
 	assert.Equal(t, "queued", notifResp.Status)
 
-	svc.AssertExpectations(t)
-	prod.AssertExpectations(t)
+	processingSvc.AssertExpectations(t)
 }
 
 func TestController_Create_WithIdempotencyKey(t *testing.T) {
 	svc := new(mockNotificationService)
-	prod := new(mockNotificationProducer)
-	app := setupTestApp(svc, prod)
+	processingSvc := new(mockNotificationProcessingService)
+	app := setupTestApp(svc, processingSvc)
 
 	notifID := uuid.New()
 	key := "my-unique-key"
 
-	svc.On("Create", mock.Anything, mock.AnythingOfType("domain.NotificationCreateRequest"), &key).
+	processingSvc.On("Create", mock.Anything, mock.AnythingOfType("domain.NotificationCreateRequest"), &key).
 		Return(&domain.Notification{
 			ID:       notifID,
-			Status:   domain.NotificationStatusPending,
+			Status:   domain.NotificationStatusQueued,
 			Channel:  domain.NotificationChannelSMS,
 			Priority: domain.NotificationPriorityNormal,
 		}, nil)
-
-	prod.On("Publish", mock.Anything, mock.AnythingOfType("*domain.Notification")).Return(nil)
-	svc.On("MarkAsQueued", mock.Anything, notifID).Return(nil)
 
 	body := `{"recipient":"+1234567890","channel":"sms","content":"Hello"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/notifications", bytes.NewBufferString(body))
@@ -226,19 +245,18 @@ func TestController_Create_WithIdempotencyKey(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, http.StatusCreated, resp.StatusCode)
 
-	svc.AssertExpectations(t)
-	prod.AssertExpectations(t)
+	processingSvc.AssertExpectations(t)
 }
 
 func TestController_Create_Scheduled_NoPublish(t *testing.T) {
 	svc := new(mockNotificationService)
-	prod := new(mockNotificationProducer)
-	app := setupTestApp(svc, prod)
+	processingSvc := new(mockNotificationProcessingService)
+	app := setupTestApp(svc, processingSvc)
 
 	futureTime := time.Now().UTC().Add(24 * time.Hour)
 	notifID := uuid.New()
 
-	svc.On("Create", mock.Anything, mock.AnythingOfType("domain.NotificationCreateRequest"), (*string)(nil)).
+	processingSvc.On("Create", mock.Anything, mock.AnythingOfType("domain.NotificationCreateRequest"), (*string)(nil)).
 		Return(&domain.Notification{
 			ID:          notifID,
 			Status:      domain.NotificationStatusScheduled,
@@ -264,16 +282,13 @@ func TestController_Create_Scheduled_NoPublish(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "scheduled", notifResp.Status)
 
-	// Producer should NOT be called for scheduled notifications.
-	prod.AssertNotCalled(t, "Publish", mock.Anything, mock.Anything)
-	svc.AssertNotCalled(t, "MarkAsQueued", mock.Anything, mock.Anything)
-	svc.AssertExpectations(t)
+	processingSvc.AssertExpectations(t)
 }
 
 func TestController_Create_InvalidBody(t *testing.T) {
 	svc := new(mockNotificationService)
-	prod := new(mockNotificationProducer)
-	app := setupTestApp(svc, prod)
+	processingSvc := new(mockNotificationProcessingService)
+	app := setupTestApp(svc, processingSvc)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/notifications", bytes.NewBufferString("{invalid"))
 	req.Header.Set("Content-Type", "application/json")
@@ -289,8 +304,8 @@ func TestController_Create_InvalidBody(t *testing.T) {
 
 func TestController_Create_ValidationError(t *testing.T) {
 	svc := new(mockNotificationService)
-	prod := new(mockNotificationProducer)
-	app := setupTestApp(svc, prod)
+	processingSvc := new(mockNotificationProcessingService)
+	app := setupTestApp(svc, processingSvc)
 
 	// Missing required fields (no recipient, no channel, no content/templateId).
 	body := `{}`
@@ -308,11 +323,11 @@ func TestController_Create_ValidationError(t *testing.T) {
 
 func TestController_Create_DuplicateIdempotencyKey(t *testing.T) {
 	svc := new(mockNotificationService)
-	prod := new(mockNotificationProducer)
-	app := setupTestApp(svc, prod)
+	processingSvc := new(mockNotificationProcessingService)
+	app := setupTestApp(svc, processingSvc)
 
 	key := "duplicate-key"
-	svc.On("Create", mock.Anything, mock.AnythingOfType("domain.NotificationCreateRequest"), &key).
+	processingSvc.On("Create", mock.Anything, mock.AnythingOfType("domain.NotificationCreateRequest"), &key).
 		Return(nil, domain.ErrNotificationDuplicateIdempotencyKey)
 
 	body := `{"recipient":"+1234567890","channel":"sms","content":"Hello"}`
@@ -328,25 +343,22 @@ func TestController_Create_DuplicateIdempotencyKey(t *testing.T) {
 	assert.False(t, apiResp.Success)
 	assert.Equal(t, "DUPLICATE_IDEMPOTENCY_KEY", apiResp.Error.Code)
 
-	svc.AssertExpectations(t)
+	processingSvc.AssertExpectations(t)
 }
 
 func TestController_Create_PublishFails_StillReturns201(t *testing.T) {
 	svc := new(mockNotificationService)
-	prod := new(mockNotificationProducer)
-	app := setupTestApp(svc, prod)
+	processingSvc := new(mockNotificationProcessingService)
+	app := setupTestApp(svc, processingSvc)
 
 	notifID := uuid.New()
-	svc.On("Create", mock.Anything, mock.AnythingOfType("domain.NotificationCreateRequest"), (*string)(nil)).
+	processingSvc.On("Create", mock.Anything, mock.AnythingOfType("domain.NotificationCreateRequest"), (*string)(nil)).
 		Return(&domain.Notification{
 			ID:       notifID,
 			Status:   domain.NotificationStatusPending,
 			Channel:  domain.NotificationChannelSMS,
 			Priority: domain.NotificationPriorityNormal,
 		}, nil)
-
-	prod.On("Publish", mock.Anything, mock.AnythingOfType("*domain.Notification")).
-		Return(fmt.Errorf("rabbitmq connection lost"))
 
 	body := `{"recipient":"+1234567890","channel":"sms","content":"Hello"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/notifications", bytes.NewBufferString(body))
@@ -366,33 +378,27 @@ func TestController_Create_PublishFails_StillReturns201(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "pending", notifResp.Status)
 
-	svc.AssertNotCalled(t, "MarkAsQueued", mock.Anything, mock.Anything)
-	svc.AssertExpectations(t)
-	prod.AssertExpectations(t)
+	processingSvc.AssertExpectations(t)
 }
 
 // --- CreateBatch Tests ---
 
 func TestController_CreateBatch_Success(t *testing.T) {
 	svc := new(mockNotificationService)
-	prod := new(mockNotificationProducer)
-	app := setupTestApp(svc, prod)
+	processingSvc := new(mockNotificationProcessingService)
+	app := setupTestApp(svc, processingSvc)
 
 	batchID := uuid.New()
 	notifID1 := uuid.New()
 	notifID2 := uuid.New()
 
 	notifications := []*domain.Notification{
-		{ID: notifID1, Status: domain.NotificationStatusPending, Channel: domain.NotificationChannelSMS, Priority: domain.NotificationPriorityNormal, BatchID: &batchID},
-		{ID: notifID2, Status: domain.NotificationStatusPending, Channel: domain.NotificationChannelSMS, Priority: domain.NotificationPriorityNormal, BatchID: &batchID},
+		{ID: notifID1, Status: domain.NotificationStatusQueued, Channel: domain.NotificationChannelSMS, Priority: domain.NotificationPriorityNormal, BatchID: &batchID},
+		{ID: notifID2, Status: domain.NotificationStatusQueued, Channel: domain.NotificationChannelSMS, Priority: domain.NotificationPriorityNormal, BatchID: &batchID},
 	}
 
-	svc.On("CreateBatch", mock.Anything, mock.AnythingOfType("domain.NotificationBatchCreateRequest")).
+	processingSvc.On("CreateBatch", mock.Anything, mock.AnythingOfType("domain.NotificationBatchCreateRequest")).
 		Return(notifications, batchID, nil)
-
-	prod.On("PublishBatch", mock.Anything, mock.AnythingOfType("[]*domain.Notification")).Return(nil)
-	svc.On("MarkAsQueued", mock.Anything, notifID1).Return(nil)
-	svc.On("MarkAsQueued", mock.Anything, notifID2).Return(nil)
 
 	body := `{"notifications":[{"recipient":"+111","channel":"sms","content":"Hello 1"},{"recipient":"+222","channel":"sms","content":"Hello 2"}]}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/notifications/batch", bytes.NewBufferString(body))
@@ -405,14 +411,13 @@ func TestController_CreateBatch_Success(t *testing.T) {
 	apiResp := parseAPIResponse(t, resp.Body)
 	assert.True(t, apiResp.Success)
 
-	svc.AssertExpectations(t)
-	prod.AssertExpectations(t)
+	processingSvc.AssertExpectations(t)
 }
 
 func TestController_CreateBatch_InvalidBody(t *testing.T) {
 	svc := new(mockNotificationService)
-	prod := new(mockNotificationProducer)
-	app := setupTestApp(svc, prod)
+	processingSvc := new(mockNotificationProcessingService)
+	app := setupTestApp(svc, processingSvc)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/notifications/batch", bytes.NewBufferString("not json"))
 	req.Header.Set("Content-Type", "application/json")
@@ -424,8 +429,8 @@ func TestController_CreateBatch_InvalidBody(t *testing.T) {
 
 func TestController_CreateBatch_ValidationError(t *testing.T) {
 	svc := new(mockNotificationService)
-	prod := new(mockNotificationProducer)
-	app := setupTestApp(svc, prod)
+	processingSvc := new(mockNotificationProcessingService)
+	app := setupTestApp(svc, processingSvc)
 
 	// Empty notifications array.
 	body := `{"notifications":[]}`
@@ -443,8 +448,8 @@ func TestController_CreateBatch_ValidationError(t *testing.T) {
 
 func TestController_CreateBatch_MixedScheduledAndPending(t *testing.T) {
 	svc := new(mockNotificationService)
-	prod := new(mockNotificationProducer)
-	app := setupTestApp(svc, prod)
+	processingSvc := new(mockNotificationProcessingService)
+	app := setupTestApp(svc, processingSvc)
 
 	batchID := uuid.New()
 	notifID1 := uuid.New()
@@ -452,18 +457,12 @@ func TestController_CreateBatch_MixedScheduledAndPending(t *testing.T) {
 	futureTime := time.Now().UTC().Add(24 * time.Hour)
 
 	notifications := []*domain.Notification{
-		{ID: notifID1, Status: domain.NotificationStatusPending, Channel: domain.NotificationChannelSMS, Priority: domain.NotificationPriorityNormal, BatchID: &batchID},
+		{ID: notifID1, Status: domain.NotificationStatusQueued, Channel: domain.NotificationChannelSMS, Priority: domain.NotificationPriorityNormal, BatchID: &batchID},
 		{ID: notifID2, Status: domain.NotificationStatusScheduled, Channel: domain.NotificationChannelSMS, Priority: domain.NotificationPriorityNormal, BatchID: &batchID, ScheduledAt: &futureTime},
 	}
 
-	svc.On("CreateBatch", mock.Anything, mock.AnythingOfType("domain.NotificationBatchCreateRequest")).
+	processingSvc.On("CreateBatch", mock.Anything, mock.AnythingOfType("domain.NotificationBatchCreateRequest")).
 		Return(notifications, batchID, nil)
-
-	// Only the non-scheduled notification should be published.
-	prod.On("PublishBatch", mock.Anything, mock.MatchedBy(func(ns []*domain.Notification) bool {
-		return len(ns) == 1 && ns[0].ID == notifID1
-	})).Return(nil)
-	svc.On("MarkAsQueued", mock.Anything, notifID1).Return(nil)
 
 	body := fmt.Sprintf(`{"notifications":[{"recipient":"+111","channel":"sms","content":"Hello 1"},{"recipient":"+222","channel":"sms","content":"Scheduled","scheduledAt":"%s"}]}`, futureTime.Format(time.RFC3339Nano))
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/notifications/batch", bytes.NewBufferString(body))
@@ -473,17 +472,15 @@ func TestController_CreateBatch_MixedScheduledAndPending(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, http.StatusCreated, resp.StatusCode)
 
-	svc.AssertNotCalled(t, "MarkAsQueued", mock.Anything, notifID2)
-	svc.AssertExpectations(t)
-	prod.AssertExpectations(t)
+	processingSvc.AssertExpectations(t)
 }
 
 // --- GetByID Tests ---
 
 func TestController_GetByID_Success(t *testing.T) {
 	svc := new(mockNotificationService)
-	prod := new(mockNotificationProducer)
-	app := setupTestApp(svc, prod)
+	processingSvc := new(mockNotificationProcessingService)
+	app := setupTestApp(svc, processingSvc)
 
 	notifID := uuid.New()
 	svc.On("GetByID", mock.Anything, notifID).Return(&domain.Notification{
@@ -508,8 +505,8 @@ func TestController_GetByID_Success(t *testing.T) {
 
 func TestController_GetByID_InvalidUUID(t *testing.T) {
 	svc := new(mockNotificationService)
-	prod := new(mockNotificationProducer)
-	app := setupTestApp(svc, prod)
+	processingSvc := new(mockNotificationProcessingService)
+	app := setupTestApp(svc, processingSvc)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/notifications/not-a-uuid", nil)
 
@@ -524,8 +521,8 @@ func TestController_GetByID_InvalidUUID(t *testing.T) {
 
 func TestController_GetByID_NotFound(t *testing.T) {
 	svc := new(mockNotificationService)
-	prod := new(mockNotificationProducer)
-	app := setupTestApp(svc, prod)
+	processingSvc := new(mockNotificationProcessingService)
+	app := setupTestApp(svc, processingSvc)
 
 	notifID := uuid.New()
 	svc.On("GetByID", mock.Anything, notifID).Return(nil, domain.ErrNotificationNotFound)
@@ -545,8 +542,8 @@ func TestController_GetByID_NotFound(t *testing.T) {
 
 func TestController_GetByID_InternalError(t *testing.T) {
 	svc := new(mockNotificationService)
-	prod := new(mockNotificationProducer)
-	app := setupTestApp(svc, prod)
+	processingSvc := new(mockNotificationProcessingService)
+	app := setupTestApp(svc, processingSvc)
 
 	notifID := uuid.New()
 	svc.On("GetByID", mock.Anything, notifID).Return(nil, fmt.Errorf("db connection failed"))
@@ -568,8 +565,8 @@ func TestController_GetByID_InternalError(t *testing.T) {
 
 func TestController_GetByBatchID_Success(t *testing.T) {
 	svc := new(mockNotificationService)
-	prod := new(mockNotificationProducer)
-	app := setupTestApp(svc, prod)
+	processingSvc := new(mockNotificationProcessingService)
+	app := setupTestApp(svc, processingSvc)
 
 	batchID := uuid.New()
 	notifications := []*domain.Notification{
@@ -593,8 +590,8 @@ func TestController_GetByBatchID_Success(t *testing.T) {
 
 func TestController_GetByBatchID_InvalidUUID(t *testing.T) {
 	svc := new(mockNotificationService)
-	prod := new(mockNotificationProducer)
-	app := setupTestApp(svc, prod)
+	processingSvc := new(mockNotificationProcessingService)
+	app := setupTestApp(svc, processingSvc)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/notifications/batch/invalid", nil)
 
@@ -611,8 +608,8 @@ func TestController_GetByBatchID_InvalidUUID(t *testing.T) {
 
 func TestController_List_Success(t *testing.T) {
 	svc := new(mockNotificationService)
-	prod := new(mockNotificationProducer)
-	app := setupTestApp(svc, prod)
+	processingSvc := new(mockNotificationProcessingService)
+	app := setupTestApp(svc, processingSvc)
 
 	expectedFilter := domain.NotificationListFilter{
 		Limit:  20,
@@ -639,8 +636,8 @@ func TestController_List_Success(t *testing.T) {
 
 func TestController_List_WithFilters(t *testing.T) {
 	svc := new(mockNotificationService)
-	prod := new(mockNotificationProducer)
-	app := setupTestApp(svc, prod)
+	processingSvc := new(mockNotificationProcessingService)
+	app := setupTestApp(svc, processingSvc)
 
 	expectedFilter := domain.NotificationListFilter{
 		Status:  "pending",
@@ -662,8 +659,8 @@ func TestController_List_WithFilters(t *testing.T) {
 
 func TestController_List_WithDateFilters(t *testing.T) {
 	svc := new(mockNotificationService)
-	prod := new(mockNotificationProducer)
-	app := setupTestApp(svc, prod)
+	processingSvc := new(mockNotificationProcessingService)
+	app := setupTestApp(svc, processingSvc)
 
 	startDate, _ := time.Parse(time.RFC3339, "2026-01-01T00:00:00Z")
 	endDate, _ := time.Parse(time.RFC3339, "2026-12-31T23:59:59Z")
@@ -688,8 +685,8 @@ func TestController_List_WithDateFilters(t *testing.T) {
 
 func TestController_List_InvalidStartDate(t *testing.T) {
 	svc := new(mockNotificationService)
-	prod := new(mockNotificationProducer)
-	app := setupTestApp(svc, prod)
+	processingSvc := new(mockNotificationProcessingService)
+	app := setupTestApp(svc, processingSvc)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/notifications?startDate=not-a-date", nil)
 
@@ -704,8 +701,8 @@ func TestController_List_InvalidStartDate(t *testing.T) {
 
 func TestController_List_InvalidEndDate(t *testing.T) {
 	svc := new(mockNotificationService)
-	prod := new(mockNotificationProducer)
-	app := setupTestApp(svc, prod)
+	processingSvc := new(mockNotificationProcessingService)
+	app := setupTestApp(svc, processingSvc)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/notifications?endDate=not-a-date", nil)
 
@@ -720,8 +717,8 @@ func TestController_List_InvalidEndDate(t *testing.T) {
 
 func TestController_List_LimitCapped(t *testing.T) {
 	svc := new(mockNotificationService)
-	prod := new(mockNotificationProducer)
-	app := setupTestApp(svc, prod)
+	processingSvc := new(mockNotificationProcessingService)
+	app := setupTestApp(svc, processingSvc)
 
 	// Limit > 100 should be capped to 100 by Normalize().
 	expectedFilter := domain.NotificationListFilter{
@@ -744,8 +741,8 @@ func TestController_List_LimitCapped(t *testing.T) {
 
 func TestController_Cancel_Success(t *testing.T) {
 	svc := new(mockNotificationService)
-	prod := new(mockNotificationProducer)
-	app := setupTestApp(svc, prod)
+	processingSvc := new(mockNotificationProcessingService)
+	app := setupTestApp(svc, processingSvc)
 
 	notifID := uuid.New()
 	svc.On("Cancel", mock.Anything, notifID).Return(&domain.Notification{
@@ -775,8 +772,8 @@ func TestController_Cancel_Success(t *testing.T) {
 
 func TestController_Cancel_InvalidUUID(t *testing.T) {
 	svc := new(mockNotificationService)
-	prod := new(mockNotificationProducer)
-	app := setupTestApp(svc, prod)
+	processingSvc := new(mockNotificationProcessingService)
+	app := setupTestApp(svc, processingSvc)
 
 	req := httptest.NewRequest(http.MethodPatch, "/api/v1/notifications/invalid/cancel", nil)
 
@@ -791,8 +788,8 @@ func TestController_Cancel_InvalidUUID(t *testing.T) {
 
 func TestController_Cancel_AlreadySent(t *testing.T) {
 	svc := new(mockNotificationService)
-	prod := new(mockNotificationProducer)
-	app := setupTestApp(svc, prod)
+	processingSvc := new(mockNotificationProcessingService)
+	app := setupTestApp(svc, processingSvc)
 
 	notifID := uuid.New()
 	svc.On("Cancel", mock.Anything, notifID).Return(nil, domain.ErrNotificationAlreadySent)
@@ -812,8 +809,8 @@ func TestController_Cancel_AlreadySent(t *testing.T) {
 
 func TestController_Cancel_NotFound(t *testing.T) {
 	svc := new(mockNotificationService)
-	prod := new(mockNotificationProducer)
-	app := setupTestApp(svc, prod)
+	processingSvc := new(mockNotificationProcessingService)
+	app := setupTestApp(svc, processingSvc)
 
 	notifID := uuid.New()
 	svc.On("Cancel", mock.Anything, notifID).Return(nil, domain.ErrNotificationNotFound)
@@ -831,10 +828,10 @@ func TestController_Cancel_NotFound(t *testing.T) {
 
 func TestController_Create_ServiceError(t *testing.T) {
 	svc := new(mockNotificationService)
-	prod := new(mockNotificationProducer)
-	app := setupTestApp(svc, prod)
+	processingSvc := new(mockNotificationProcessingService)
+	app := setupTestApp(svc, processingSvc)
 
-	svc.On("Create", mock.Anything, mock.AnythingOfType("domain.NotificationCreateRequest"), (*string)(nil)).
+	processingSvc.On("Create", mock.Anything, mock.AnythingOfType("domain.NotificationCreateRequest"), (*string)(nil)).
 		Return(nil, errs.NewAppError("TEMPLATE_NOT_FOUND", "template not found", http.StatusNotFound))
 
 	body := `{"recipient":"+1234567890","channel":"sms","templateId":"` + uuid.New().String() + `"}`
@@ -849,5 +846,5 @@ func TestController_Create_ServiceError(t *testing.T) {
 	assert.False(t, apiResp.Success)
 	assert.Equal(t, "TEMPLATE_NOT_FOUND", apiResp.Error.Code)
 
-	svc.AssertExpectations(t)
+	processingSvc.AssertExpectations(t)
 }
