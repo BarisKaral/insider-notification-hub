@@ -23,7 +23,7 @@ func (a *App) setupRouter() {
 	middleware.SetupMiddleware(app)
 
 	// Health
-	a.container.HealthHandler.RegisterRoutes(app)
+	a.container.HealthController.RegisterRoutes(app)
 
 	// Metrics
 	app.Get("/metrics", adaptor.HTTPHandler(promhttp.Handler()))
@@ -43,8 +43,8 @@ func (a *App) setupRouter() {
 
 	// API v1
 	v1 := app.Group("/api/v1")
-	a.container.NotificationHandler.RegisterRoutes(v1)
-	a.container.TemplateHandler.RegisterRoutes(v1)
+	a.container.NotificationController.RegisterRoutes(v1)
+	a.container.TemplateController.RegisterRoutes(v1)
 
 	a.fiber = app
 }

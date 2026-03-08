@@ -133,7 +133,7 @@ func (m *mockNotificationProducer) PublishBatch(ctx context.Context, notificatio
 
 func setupTestApp(svc *mockNotificationService, prod *mockNotificationProducer) *fiber.App {
 	app := fiber.New()
-	handler := NewNotificationHandler(svc, prod)
+	handler := NewNotificationController(svc, prod)
 	handler.RegisterRoutes(app.Group("/api/v1"))
 	return app
 }
@@ -148,7 +148,7 @@ func parseAPIResponse(t *testing.T, body io.Reader) response.APIResponse {
 
 // --- Create Tests ---
 
-func TestHandler_Create_Success(t *testing.T) {
+func TestController_Create_Success(t *testing.T) {
 	svc := new(mockNotificationService)
 	prod := new(mockNotificationProducer)
 	app := setupTestApp(svc, prod)
@@ -192,7 +192,7 @@ func TestHandler_Create_Success(t *testing.T) {
 	prod.AssertExpectations(t)
 }
 
-func TestHandler_Create_WithIdempotencyKey(t *testing.T) {
+func TestController_Create_WithIdempotencyKey(t *testing.T) {
 	svc := new(mockNotificationService)
 	prod := new(mockNotificationProducer)
 	app := setupTestApp(svc, prod)
@@ -224,7 +224,7 @@ func TestHandler_Create_WithIdempotencyKey(t *testing.T) {
 	prod.AssertExpectations(t)
 }
 
-func TestHandler_Create_Scheduled_NoPublish(t *testing.T) {
+func TestController_Create_Scheduled_NoPublish(t *testing.T) {
 	svc := new(mockNotificationService)
 	prod := new(mockNotificationProducer)
 	app := setupTestApp(svc, prod)
@@ -264,7 +264,7 @@ func TestHandler_Create_Scheduled_NoPublish(t *testing.T) {
 	svc.AssertExpectations(t)
 }
 
-func TestHandler_Create_InvalidBody(t *testing.T) {
+func TestController_Create_InvalidBody(t *testing.T) {
 	svc := new(mockNotificationService)
 	prod := new(mockNotificationProducer)
 	app := setupTestApp(svc, prod)
@@ -281,7 +281,7 @@ func TestHandler_Create_InvalidBody(t *testing.T) {
 	assert.Equal(t, "INVALID_BODY", apiResp.Error.Code)
 }
 
-func TestHandler_Create_ValidationError(t *testing.T) {
+func TestController_Create_ValidationError(t *testing.T) {
 	svc := new(mockNotificationService)
 	prod := new(mockNotificationProducer)
 	app := setupTestApp(svc, prod)
@@ -300,7 +300,7 @@ func TestHandler_Create_ValidationError(t *testing.T) {
 	assert.Equal(t, "VALIDATION_ERROR", apiResp.Error.Code)
 }
 
-func TestHandler_Create_DuplicateIdempotencyKey(t *testing.T) {
+func TestController_Create_DuplicateIdempotencyKey(t *testing.T) {
 	svc := new(mockNotificationService)
 	prod := new(mockNotificationProducer)
 	app := setupTestApp(svc, prod)
@@ -325,7 +325,7 @@ func TestHandler_Create_DuplicateIdempotencyKey(t *testing.T) {
 	svc.AssertExpectations(t)
 }
 
-func TestHandler_Create_PublishFails_StillReturns201(t *testing.T) {
+func TestController_Create_PublishFails_StillReturns201(t *testing.T) {
 	svc := new(mockNotificationService)
 	prod := new(mockNotificationProducer)
 	app := setupTestApp(svc, prod)
@@ -367,7 +367,7 @@ func TestHandler_Create_PublishFails_StillReturns201(t *testing.T) {
 
 // --- CreateBatch Tests ---
 
-func TestHandler_CreateBatch_Success(t *testing.T) {
+func TestController_CreateBatch_Success(t *testing.T) {
 	svc := new(mockNotificationService)
 	prod := new(mockNotificationProducer)
 	app := setupTestApp(svc, prod)
@@ -403,7 +403,7 @@ func TestHandler_CreateBatch_Success(t *testing.T) {
 	prod.AssertExpectations(t)
 }
 
-func TestHandler_CreateBatch_InvalidBody(t *testing.T) {
+func TestController_CreateBatch_InvalidBody(t *testing.T) {
 	svc := new(mockNotificationService)
 	prod := new(mockNotificationProducer)
 	app := setupTestApp(svc, prod)
@@ -416,7 +416,7 @@ func TestHandler_CreateBatch_InvalidBody(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
 }
 
-func TestHandler_CreateBatch_ValidationError(t *testing.T) {
+func TestController_CreateBatch_ValidationError(t *testing.T) {
 	svc := new(mockNotificationService)
 	prod := new(mockNotificationProducer)
 	app := setupTestApp(svc, prod)
@@ -435,7 +435,7 @@ func TestHandler_CreateBatch_ValidationError(t *testing.T) {
 	assert.Equal(t, "VALIDATION_ERROR", apiResp.Error.Code)
 }
 
-func TestHandler_CreateBatch_MixedScheduledAndPending(t *testing.T) {
+func TestController_CreateBatch_MixedScheduledAndPending(t *testing.T) {
 	svc := new(mockNotificationService)
 	prod := new(mockNotificationProducer)
 	app := setupTestApp(svc, prod)
@@ -474,7 +474,7 @@ func TestHandler_CreateBatch_MixedScheduledAndPending(t *testing.T) {
 
 // --- GetByID Tests ---
 
-func TestHandler_GetByID_Success(t *testing.T) {
+func TestController_GetByID_Success(t *testing.T) {
 	svc := new(mockNotificationService)
 	prod := new(mockNotificationProducer)
 	app := setupTestApp(svc, prod)
@@ -500,7 +500,7 @@ func TestHandler_GetByID_Success(t *testing.T) {
 	svc.AssertExpectations(t)
 }
 
-func TestHandler_GetByID_InvalidUUID(t *testing.T) {
+func TestController_GetByID_InvalidUUID(t *testing.T) {
 	svc := new(mockNotificationService)
 	prod := new(mockNotificationProducer)
 	app := setupTestApp(svc, prod)
@@ -516,7 +516,7 @@ func TestHandler_GetByID_InvalidUUID(t *testing.T) {
 	assert.Equal(t, "INVALID_ID", apiResp.Error.Code)
 }
 
-func TestHandler_GetByID_NotFound(t *testing.T) {
+func TestController_GetByID_NotFound(t *testing.T) {
 	svc := new(mockNotificationService)
 	prod := new(mockNotificationProducer)
 	app := setupTestApp(svc, prod)
@@ -537,7 +537,7 @@ func TestHandler_GetByID_NotFound(t *testing.T) {
 	svc.AssertExpectations(t)
 }
 
-func TestHandler_GetByID_InternalError(t *testing.T) {
+func TestController_GetByID_InternalError(t *testing.T) {
 	svc := new(mockNotificationService)
 	prod := new(mockNotificationProducer)
 	app := setupTestApp(svc, prod)
@@ -560,7 +560,7 @@ func TestHandler_GetByID_InternalError(t *testing.T) {
 
 // --- GetByBatchID Tests ---
 
-func TestHandler_GetByBatchID_Success(t *testing.T) {
+func TestController_GetByBatchID_Success(t *testing.T) {
 	svc := new(mockNotificationService)
 	prod := new(mockNotificationProducer)
 	app := setupTestApp(svc, prod)
@@ -585,7 +585,7 @@ func TestHandler_GetByBatchID_Success(t *testing.T) {
 	svc.AssertExpectations(t)
 }
 
-func TestHandler_GetByBatchID_InvalidUUID(t *testing.T) {
+func TestController_GetByBatchID_InvalidUUID(t *testing.T) {
 	svc := new(mockNotificationService)
 	prod := new(mockNotificationProducer)
 	app := setupTestApp(svc, prod)
@@ -603,7 +603,7 @@ func TestHandler_GetByBatchID_InvalidUUID(t *testing.T) {
 
 // --- List Tests ---
 
-func TestHandler_List_Success(t *testing.T) {
+func TestController_List_Success(t *testing.T) {
 	svc := new(mockNotificationService)
 	prod := new(mockNotificationProducer)
 	app := setupTestApp(svc, prod)
@@ -631,7 +631,7 @@ func TestHandler_List_Success(t *testing.T) {
 	svc.AssertExpectations(t)
 }
 
-func TestHandler_List_WithFilters(t *testing.T) {
+func TestController_List_WithFilters(t *testing.T) {
 	svc := new(mockNotificationService)
 	prod := new(mockNotificationProducer)
 	app := setupTestApp(svc, prod)
@@ -654,7 +654,7 @@ func TestHandler_List_WithFilters(t *testing.T) {
 	svc.AssertExpectations(t)
 }
 
-func TestHandler_List_WithDateFilters(t *testing.T) {
+func TestController_List_WithDateFilters(t *testing.T) {
 	svc := new(mockNotificationService)
 	prod := new(mockNotificationProducer)
 	app := setupTestApp(svc, prod)
@@ -680,7 +680,7 @@ func TestHandler_List_WithDateFilters(t *testing.T) {
 	svc.AssertExpectations(t)
 }
 
-func TestHandler_List_InvalidStartDate(t *testing.T) {
+func TestController_List_InvalidStartDate(t *testing.T) {
 	svc := new(mockNotificationService)
 	prod := new(mockNotificationProducer)
 	app := setupTestApp(svc, prod)
@@ -696,7 +696,7 @@ func TestHandler_List_InvalidStartDate(t *testing.T) {
 	assert.Equal(t, "INVALID_PARAM", apiResp.Error.Code)
 }
 
-func TestHandler_List_InvalidEndDate(t *testing.T) {
+func TestController_List_InvalidEndDate(t *testing.T) {
 	svc := new(mockNotificationService)
 	prod := new(mockNotificationProducer)
 	app := setupTestApp(svc, prod)
@@ -712,7 +712,7 @@ func TestHandler_List_InvalidEndDate(t *testing.T) {
 	assert.Equal(t, "INVALID_PARAM", apiResp.Error.Code)
 }
 
-func TestHandler_List_LimitCapped(t *testing.T) {
+func TestController_List_LimitCapped(t *testing.T) {
 	svc := new(mockNotificationService)
 	prod := new(mockNotificationProducer)
 	app := setupTestApp(svc, prod)
@@ -736,7 +736,7 @@ func TestHandler_List_LimitCapped(t *testing.T) {
 
 // --- Cancel Tests ---
 
-func TestHandler_Cancel_Success(t *testing.T) {
+func TestController_Cancel_Success(t *testing.T) {
 	svc := new(mockNotificationService)
 	prod := new(mockNotificationProducer)
 	app := setupTestApp(svc, prod)
@@ -767,7 +767,7 @@ func TestHandler_Cancel_Success(t *testing.T) {
 	svc.AssertExpectations(t)
 }
 
-func TestHandler_Cancel_InvalidUUID(t *testing.T) {
+func TestController_Cancel_InvalidUUID(t *testing.T) {
 	svc := new(mockNotificationService)
 	prod := new(mockNotificationProducer)
 	app := setupTestApp(svc, prod)
@@ -783,7 +783,7 @@ func TestHandler_Cancel_InvalidUUID(t *testing.T) {
 	assert.Equal(t, "INVALID_ID", apiResp.Error.Code)
 }
 
-func TestHandler_Cancel_AlreadySent(t *testing.T) {
+func TestController_Cancel_AlreadySent(t *testing.T) {
 	svc := new(mockNotificationService)
 	prod := new(mockNotificationProducer)
 	app := setupTestApp(svc, prod)
@@ -804,7 +804,7 @@ func TestHandler_Cancel_AlreadySent(t *testing.T) {
 	svc.AssertExpectations(t)
 }
 
-func TestHandler_Cancel_NotFound(t *testing.T) {
+func TestController_Cancel_NotFound(t *testing.T) {
 	svc := new(mockNotificationService)
 	prod := new(mockNotificationProducer)
 	app := setupTestApp(svc, prod)
@@ -823,7 +823,7 @@ func TestHandler_Cancel_NotFound(t *testing.T) {
 
 // --- Service CreateFailed Tests ---
 
-func TestHandler_Create_ServiceError(t *testing.T) {
+func TestController_Create_ServiceError(t *testing.T) {
 	svc := new(mockNotificationService)
 	prod := new(mockNotificationProducer)
 	app := setupTestApp(svc, prod)

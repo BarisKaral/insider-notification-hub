@@ -29,18 +29,18 @@ type Container struct {
 	NotificationService  notification.NotificationService
 	NotificationProducer notification.NotificationProducer
 	NotificationConsumer notification.NotificationConsumer
-	NotificationHandler  notification.NotificationHandler
+	NotificationController  notification.NotificationController
 	NotificationMetrics  *notification.NotificationMetrics
 
 	// Template domain
 	TemplateRepo    notificationtemplate.NotificationTemplateRepository
 	TemplateService notificationtemplate.NotificationTemplateService
-	TemplateHandler notificationtemplate.NotificationTemplateHandler
+	TemplateController notificationtemplate.NotificationTemplateController
 
 	// Infrastructure
 	ProviderClient provider.ProviderClient
 	HealthService  health.HealthService
-	HealthHandler  health.HealthHandler
+	HealthController  health.HealthController
 	WSHub          *notification.NotificationHub
 }
 
@@ -136,13 +136,13 @@ func NewContainer(cfg *config.Config) (*Container, error) {
 		consumerCfg,
 	)
 
-	// 12. Handlers
-	c.NotificationHandler = notification.NewNotificationHandler(c.NotificationService, c.NotificationProducer)
-	c.TemplateHandler = notificationtemplate.NewNotificationTemplateHandler(c.TemplateService)
+	// 12. Controllers
+	c.NotificationController = notification.NewNotificationController(c.NotificationService, c.NotificationProducer)
+	c.TemplateController = notificationtemplate.NewNotificationTemplateController(c.TemplateService)
 
 	// 13. Health check
 	c.HealthService = health.NewHealthService(db, rmqConn)
-	c.HealthHandler = health.NewHealthHandler(c.HealthService)
+	c.HealthController = health.NewHealthController(c.HealthService)
 
 	logger.Info().Msg("all dependencies initialized")
 

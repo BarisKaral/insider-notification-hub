@@ -6,32 +6,32 @@ import (
 	"github.com/gofiber/fiber/v2"
 )
 
-// HealthHandler defines the HTTP handler interface for health check endpoints.
-type HealthHandler interface {
+// HealthController defines the HTTP controller interface for health check endpoints.
+type HealthController interface {
 	Health(c *fiber.Ctx) error
 	RegisterRoutes(router fiber.Router)
 }
 
-type healthHandler struct {
+type healthController struct {
 	service HealthService
 }
 
-var _ HealthHandler = (*healthHandler)(nil)
+var _ HealthController = (*healthController)(nil)
 
-// NewHealthHandler creates a new HealthHandler.
-func NewHealthHandler(service HealthService) HealthHandler {
-	return &healthHandler{
+// NewHealthController creates a new HealthController.
+func NewHealthController(service HealthService) HealthController {
+	return &healthController{
 		service: service,
 	}
 }
 
 // RegisterRoutes registers health check routes under the provided router.
-func (h *healthHandler) RegisterRoutes(router fiber.Router) {
+func (h *healthController) RegisterRoutes(router fiber.Router) {
 	router.Get("/health", h.Health)
 }
 
 // Health handles GET /health.
-func (h *healthHandler) Health(c *fiber.Ctx) error {
+func (h *healthController) Health(c *fiber.Ctx) error {
 	resp := h.service.Check(c.Context())
 	statusCode := http.StatusOK
 	if resp.Status != "healthy" {

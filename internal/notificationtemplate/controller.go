@@ -10,7 +10,7 @@ import (
 	"github.com/google/uuid"
 )
 
-type NotificationTemplateHandler interface {
+type NotificationTemplateController interface {
 	Create(c *fiber.Ctx) error
 	GetByID(c *fiber.Ctx) error
 	List(c *fiber.Ctx) error
@@ -19,17 +19,17 @@ type NotificationTemplateHandler interface {
 	RegisterRoutes(router fiber.Router)
 }
 
-type handler struct {
+type controller struct {
 	svc NotificationTemplateService
 }
 
-var _ NotificationTemplateHandler = (*handler)(nil)
+var _ NotificationTemplateController = (*controller)(nil)
 
-func NewNotificationTemplateHandler(svc NotificationTemplateService) NotificationTemplateHandler {
-	return &handler{svc: svc}
+func NewNotificationTemplateController(svc NotificationTemplateService) NotificationTemplateController {
+	return &controller{svc: svc}
 }
 
-func (h *handler) RegisterRoutes(router fiber.Router) {
+func (h *controller) RegisterRoutes(router fiber.Router) {
 	templates := router.Group("/notification-templates")
 	templates.Post("/", h.Create)
 	templates.Get("/:id", h.GetByID)
@@ -49,7 +49,7 @@ func (h *handler) RegisterRoutes(router fiber.Router) {
 // @Failure 400 {object} response.APIResponse
 // @Failure 500 {object} response.APIResponse
 // @Router /notification-templates [post]
-func (h *handler) Create(c *fiber.Ctx) error {
+func (h *controller) Create(c *fiber.Ctx) error {
 	var req NotificationTemplateCreateRequest
 	if err := c.BodyParser(&req); err != nil {
 		return response.Error(c, http.StatusBadRequest, "INVALID_BODY", "invalid request body")
@@ -84,7 +84,7 @@ func (h *handler) Create(c *fiber.Ctx) error {
 // @Failure 404 {object} response.APIResponse
 // @Failure 500 {object} response.APIResponse
 // @Router /notification-templates/{id} [get]
-func (h *handler) GetByID(c *fiber.Ctx) error {
+func (h *controller) GetByID(c *fiber.Ctx) error {
 	id, err := uuid.Parse(c.Params("id"))
 	if err != nil {
 		return response.Error(c, http.StatusBadRequest, "INVALID_ID", "invalid template ID")
@@ -111,7 +111,7 @@ func (h *handler) GetByID(c *fiber.Ctx) error {
 // @Success 200 {object} response.APIResponse
 // @Failure 500 {object} response.APIResponse
 // @Router /notification-templates [get]
-func (h *handler) List(c *fiber.Ctx) error {
+func (h *controller) List(c *fiber.Ctx) error {
 	limit, _ := strconv.Atoi(c.Query("limit", "20"))
 	offset, _ := strconv.Atoi(c.Query("offset", "0"))
 
@@ -151,7 +151,7 @@ func (h *handler) List(c *fiber.Ctx) error {
 // @Failure 404 {object} response.APIResponse
 // @Failure 500 {object} response.APIResponse
 // @Router /notification-templates/{id} [put]
-func (h *handler) Update(c *fiber.Ctx) error {
+func (h *controller) Update(c *fiber.Ctx) error {
 	id, err := uuid.Parse(c.Params("id"))
 	if err != nil {
 		return response.Error(c, http.StatusBadRequest, "INVALID_ID", "invalid template ID")
@@ -190,7 +190,7 @@ func (h *handler) Update(c *fiber.Ctx) error {
 // @Failure 404 {object} response.APIResponse
 // @Failure 500 {object} response.APIResponse
 // @Router /notification-templates/{id} [delete]
-func (h *handler) Delete(c *fiber.Ctx) error {
+func (h *controller) Delete(c *fiber.Ctx) error {
 	id, err := uuid.Parse(c.Params("id"))
 	if err != nil {
 		return response.Error(c, http.StatusBadRequest, "INVALID_ID", "invalid template ID")

@@ -16,8 +16,8 @@ import (
 	"github.com/baris/notification-hub/pkg/response"
 )
 
-// NotificationHandler defines the HTTP handler interface for notification endpoints.
-type NotificationHandler interface {
+// NotificationController defines the HTTP controller interface for notification endpoints.
+type NotificationController interface {
 	Create(c *fiber.Ctx) error
 	CreateBatch(c *fiber.Ctx) error
 	GetByID(c *fiber.Ctx) error
@@ -27,23 +27,23 @@ type NotificationHandler interface {
 	RegisterRoutes(router fiber.Router)
 }
 
-type notificationHandler struct {
+type notificationController struct {
 	service  NotificationService
 	producer NotificationProducer
 }
 
-var _ NotificationHandler = (*notificationHandler)(nil)
+var _ NotificationController = (*notificationController)(nil)
 
-// NewNotificationHandler creates a new NotificationHandler.
-func NewNotificationHandler(service NotificationService, producer NotificationProducer) NotificationHandler {
-	return &notificationHandler{
+// NewNotificationController creates a new NotificationController.
+func NewNotificationController(service NotificationService, producer NotificationProducer) NotificationController {
+	return &notificationController{
 		service:  service,
 		producer: producer,
 	}
 }
 
 // RegisterRoutes registers notification routes under the provided router group.
-func (h *notificationHandler) RegisterRoutes(router fiber.Router) {
+func (h *notificationController) RegisterRoutes(router fiber.Router) {
 	notifications := router.Group("/notifications")
 	notifications.Post("/", h.Create)
 	notifications.Post("/batch", h.CreateBatch)
@@ -65,8 +65,8 @@ func (h *notificationHandler) RegisterRoutes(router fiber.Router) {
 // @Failure 400 {object} response.APIResponse
 // @Failure 500 {object} response.APIResponse
 // @Router /notifications [post]
-func (h *notificationHandler) Create(c *fiber.Ctx) error {
-	ctx, span := otel.Tracer("notification").Start(c.Context(), "handler.Create")
+func (h *notificationController) Create(c *fiber.Ctx) error {
+	ctx, span := otel.Tracer("notification").Start(c.Context(), "controller.Create")
 	defer span.End()
 
 	// Read optional idempotency key header.
@@ -129,8 +129,8 @@ func (h *notificationHandler) Create(c *fiber.Ctx) error {
 // @Failure 400 {object} response.APIResponse
 // @Failure 500 {object} response.APIResponse
 // @Router /notifications/batch [post]
-func (h *notificationHandler) CreateBatch(c *fiber.Ctx) error {
-	ctx, span := otel.Tracer("notification").Start(c.Context(), "handler.CreateBatch")
+func (h *notificationController) CreateBatch(c *fiber.Ctx) error {
+	ctx, span := otel.Tracer("notification").Start(c.Context(), "controller.CreateBatch")
 	defer span.End()
 
 	// Parse request body.
@@ -202,7 +202,7 @@ func (h *notificationHandler) CreateBatch(c *fiber.Ctx) error {
 // @Failure 404 {object} response.APIResponse
 // @Failure 500 {object} response.APIResponse
 // @Router /notifications/{id} [get]
-func (h *notificationHandler) GetByID(c *fiber.Ctx) error {
+func (h *notificationController) GetByID(c *fiber.Ctx) error {
 	id, err := uuid.Parse(c.Params("id"))
 	if err != nil {
 		return response.Error(c, http.StatusBadRequest, "INVALID_ID", "invalid notification ID")
@@ -229,7 +229,7 @@ func (h *notificationHandler) GetByID(c *fiber.Ctx) error {
 // @Failure 400 {object} response.APIResponse
 // @Failure 500 {object} response.APIResponse
 // @Router /notifications/batch/{batchId} [get]
-func (h *notificationHandler) GetByBatchID(c *fiber.Ctx) error {
+func (h *notificationController) GetByBatchID(c *fiber.Ctx) error {
 	batchID, err := uuid.Parse(c.Params("batchId"))
 	if err != nil {
 		return response.Error(c, http.StatusBadRequest, "INVALID_ID", "invalid batch ID")
@@ -261,7 +261,7 @@ func (h *notificationHandler) GetByBatchID(c *fiber.Ctx) error {
 // @Failure 400 {object} response.APIResponse
 // @Failure 500 {object} response.APIResponse
 // @Router /notifications [get]
-func (h *notificationHandler) List(c *fiber.Ctx) error {
+func (h *notificationController) List(c *fiber.Ctx) error {
 	limit, _ := strconv.Atoi(c.Query("limit", "20"))
 	offset, _ := strconv.Atoi(c.Query("offset", "0"))
 
@@ -319,7 +319,7 @@ func (h *notificationHandler) List(c *fiber.Ctx) error {
 // @Failure 409 {object} response.APIResponse
 // @Failure 500 {object} response.APIResponse
 // @Router /notifications/{id}/cancel [patch]
-func (h *notificationHandler) Cancel(c *fiber.Ctx) error {
+func (h *notificationController) Cancel(c *fiber.Ctx) error {
 	id, err := uuid.Parse(c.Params("id"))
 	if err != nil {
 		return response.Error(c, http.StatusBadRequest, "INVALID_ID", "invalid notification ID")
