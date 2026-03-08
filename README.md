@@ -6,7 +6,7 @@ An event-driven notification system built with Go that processes and delivers me
 
 | Component | Technology |
 |-----------|-----------|
-| Language | Go 1.23 |
+| Language | Go 1.26 |
 | HTTP Framework | Fiber v2 |
 | ORM | GORM + PostgreSQL |
 | Message Broker | RabbitMQ (amqp091-go) |
@@ -103,6 +103,7 @@ This starts:
 - **Prometheus** at `http://localhost:9090`
 - **Grafana** at `http://localhost:3000` (admin/admin)
 - **Jaeger** at `http://localhost:16686`
+- **pgAdmin** at `http://localhost:5050` (desktop mode, no login required)
 
 ### Run Locally (development)
 
@@ -306,6 +307,7 @@ make test-e2e
 | Prometheus | http://localhost:9090 | Metrics queries |
 | Jaeger | http://localhost:16686 | Distributed tracing |
 | RabbitMQ | http://localhost:15672 | Queue management (guest/guest) |
+| pgAdmin | http://localhost:5050 | PostgreSQL client (no login) |
 | Swagger | http://localhost:8080/swagger/ | API documentation |
 
 ### Prometheus Metrics
@@ -356,7 +358,8 @@ notification-hub/
 ├── test/e2e/                                # End-to-end tests
 ├── deploy/
 │   ├── prometheus/prometheus.yml
-│   └── grafana/                             # Datasources & dashboards
+│   ├── grafana/                             # Datasources & dashboards
+│   └── pgadmin/servers.json                 # Auto-configured server
 ├── docs/                                    # Swagger (auto-generated)
 ├── Dockerfile
 ├── docker-compose.yaml

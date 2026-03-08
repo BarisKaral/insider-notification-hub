@@ -6,10 +6,12 @@ require (
 	github.com/DATA-DOG/go-sqlmock v1.5.2
 	github.com/go-playground/validator/v10 v10.30.1
 	github.com/gofiber/adaptor/v2 v2.2.1
+	github.com/gofiber/contrib/otelfiber/v2 v2.2.3
 	github.com/gofiber/fiber/v2 v2.52.12
 	github.com/gofiber/websocket/v2 v2.2.1
 	github.com/golang-migrate/migrate/v4 v4.19.1
 	github.com/google/uuid v1.6.0
+	github.com/gorilla/websocket v1.5.3
 	github.com/jackc/pgx/v5 v5.6.0
 	github.com/joho/godotenv v1.5.1
 	github.com/prometheus/client_golang v1.23.2
@@ -46,8 +48,6 @@ require (
 	github.com/go-openapi/swag v0.19.15 // indirect
 	github.com/go-playground/locales v0.14.1 // indirect
 	github.com/go-playground/universal-translator v0.18.1 // indirect
-	github.com/gofiber/contrib/otelfiber/v2 v2.2.3 // indirect
-	github.com/gorilla/websocket v1.5.3 // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.28.0 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
