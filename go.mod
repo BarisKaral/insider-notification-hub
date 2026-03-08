@@ -4,6 +4,7 @@ go 1.26.1
 
 require (
 	github.com/gofiber/fiber/v2 v2.52.12
+	github.com/joho/godotenv v1.5.1
 	github.com/rabbitmq/amqp091-go v1.10.0
 	github.com/rs/zerolog v1.34.0
 	gorm.io/driver/postgres v1.6.0
