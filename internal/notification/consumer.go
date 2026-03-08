@@ -314,6 +314,15 @@ func (c *notificationConsumer) handleDLQMessage(ctx context.Context, msg amqp.De
 			"x-retry-count": newRetryCount,
 		}
 
+		// Forward trace context headers from the original message.
+		if msg.Headers != nil {
+			for _, key := range []string{"traceparent", "tracestate"} {
+				if v, ok := msg.Headers[key]; ok {
+					headers[key] = v
+				}
+			}
+		}
+
 		err := c.channel.PublishWithContext(ctx,
 			"notification.retry.exchange", // exchange
 			channel,                       // routing key
