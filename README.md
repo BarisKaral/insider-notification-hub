@@ -85,20 +85,7 @@ Runs every 30 seconds to handle:
 
 ### Run
 
-```bash
-# Copy environment config
-cp .env.example .env
-```
-
-Edit `.env` and update the following for Docker networking:
-
-```env
-DB_HOST=postgres
-RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672/
-JAEGER_ENDPOINT=jaeger:4318
-```
-
-Get a unique webhook URL from https://webhook.site and set it:
+`.env` is included in the repository with Docker-ready defaults. Before starting, get a unique webhook URL from https://webhook.site and update it in `.env`:
 
 ```env
 PROVIDER_URL=https://webhook.site/<your-uuid>
