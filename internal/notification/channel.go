@@ -1,9 +1,9 @@
 package notification
 
-type Channel string
+type NotificationChannel string
 
 const (
-	ChannelSMS   Channel = "sms"
-	ChannelEmail Channel = "email"
-	ChannelPush  Channel = "push"
+	NotificationChannelSMS   NotificationChannel = "sms"
+	NotificationChannelEmail NotificationChannel = "email"
+	NotificationChannelPush  NotificationChannel = "push"
 )

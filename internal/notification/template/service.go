@@ -8,26 +8,26 @@ import (
 	"github.com/google/uuid"
 )
 
-type Service interface {
-	Create(ctx context.Context, req CreateRequest) (*Template, error)
+type TemplateService interface {
+	Create(ctx context.Context, req TemplateCreateRequest) (*Template, error)
 	GetByID(ctx context.Context, id uuid.UUID) (*Template, error)
 	List(ctx context.Context, limit, offset int) ([]*Template, int64, error)
-	Update(ctx context.Context, id uuid.UUID, req UpdateRequest) (*Template, error)
+	Update(ctx context.Context, id uuid.UUID, req TemplateUpdateRequest) (*Template, error)
 	Delete(ctx context.Context, id uuid.UUID) error
 	Render(ctx context.Context, templateID uuid.UUID, variables map[string]string) (string, error)
 }
 
 type service struct {
-	repo Repository
+	repo TemplateRepository
 }
 
-var _ Service = (*service)(nil)
+var _ TemplateService = (*service)(nil)
 
-func NewService(repo Repository) Service {
+func NewTemplateService(repo TemplateRepository) TemplateService {
 	return &service{repo: repo}
 }
 
-func (s *service) Create(ctx context.Context, req CreateRequest) (*Template, error) {
+func (s *service) Create(ctx context.Context, req TemplateCreateRequest) (*Template, error) {
 	t := &Template{
 		Name:    req.Name,
 		Channel: req.Channel,
@@ -49,7 +49,7 @@ func (s *service) List(ctx context.Context, limit, offset int) ([]*Template, int
 	return s.repo.List(ctx, limit, offset)
 }
 
-func (s *service) Update(ctx context.Context, id uuid.UUID, req UpdateRequest) (*Template, error) {
+func (s *service) Update(ctx context.Context, id uuid.UUID, req TemplateUpdateRequest) (*Template, error) {
 	t, err := s.repo.GetByID(ctx, id)
 	if err != nil {
 		return nil, err

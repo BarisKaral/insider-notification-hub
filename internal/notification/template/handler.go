@@ -10,7 +10,7 @@ import (
 	"github.com/google/uuid"
 )
 
-type Handler interface {
+type TemplateHandler interface {
 	Create(c *fiber.Ctx) error
 	GetByID(c *fiber.Ctx) error
 	List(c *fiber.Ctx) error
@@ -20,12 +20,12 @@ type Handler interface {
 }
 
 type handler struct {
-	svc Service
+	svc TemplateService
 }
 
-var _ Handler = (*handler)(nil)
+var _ TemplateHandler = (*handler)(nil)
 
-func NewHandler(svc Service) Handler {
+func NewTemplateHandler(svc TemplateService) TemplateHandler {
 	return &handler{svc: svc}
 }
 
@@ -39,7 +39,7 @@ func (h *handler) RegisterRoutes(router fiber.Router) {
 }
 
 func (h *handler) Create(c *fiber.Ctx) error {
-	var req CreateRequest
+	var req TemplateCreateRequest
 	if err := c.BodyParser(&req); err != nil {
 		return response.Error(c, http.StatusBadRequest, "INVALID_BODY", "invalid request body")
 	}
@@ -59,7 +59,7 @@ func (h *handler) Create(c *fiber.Ctx) error {
 		return response.Error(c, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to create template")
 	}
 
-	return response.Success(c, http.StatusCreated, ToResponse(t))
+	return response.Success(c, http.StatusCreated, ToTemplateResponse(t))
 }
 
 func (h *handler) GetByID(c *fiber.Ctx) error {
@@ -76,7 +76,7 @@ func (h *handler) GetByID(c *fiber.Ctx) error {
 		return response.Error(c, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to get template")
 	}
 
-	return response.Success(c, http.StatusOK, ToResponse(t))
+	return response.Success(c, http.StatusOK, ToTemplateResponse(t))
 }
 
 func (h *handler) List(c *fiber.Ctx) error {
@@ -99,7 +99,7 @@ func (h *handler) List(c *fiber.Ctx) error {
 	}
 
 	return response.Success(c, http.StatusOK, fiber.Map{
-		"items":  ToResponseList(templates),
+		"items":  ToTemplateResponseList(templates),
 		"total":  total,
 		"limit":  limit,
 		"offset": offset,
@@ -112,7 +112,7 @@ func (h *handler) Update(c *fiber.Ctx) error {
 		return response.Error(c, http.StatusBadRequest, "INVALID_ID", "invalid template ID")
 	}
 
-	var req UpdateRequest
+	var req TemplateUpdateRequest
 	if err := c.BodyParser(&req); err != nil {
 		return response.Error(c, http.StatusBadRequest, "INVALID_BODY", "invalid request body")
 	}
@@ -132,7 +132,7 @@ func (h *handler) Update(c *fiber.Ctx) error {
 		return response.Error(c, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to update template")
 	}
 
-	return response.Success(c, http.StatusOK, ToResponse(t))
+	return response.Success(c, http.StatusOK, ToTemplateResponse(t))
 }
 
 func (h *handler) Delete(c *fiber.Ctx) error {

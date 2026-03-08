@@ -1,6 +1,6 @@
 package rabbitmq
 
-type QueueConfig struct {
+type RabbitMQQueueConfig struct {
 	Name        string
 	Exchange    string
 	RoutingKey  string

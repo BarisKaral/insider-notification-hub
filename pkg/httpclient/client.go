@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-type Client interface {
+type HTTPClient interface {
 	Do(ctx context.Context, method, url string, body interface{}, headers map[string]string) (*http.Response, error)
 	Get(ctx context.Context, url string, headers map[string]string) (*http.Response, error)
 	Post(ctx context.Context, url string, body interface{}, headers map[string]string) (*http.Response, error)
@@ -23,7 +23,7 @@ type client struct {
 	defaultHeaders map[string]string
 }
 
-func NewClient(cfg Config) Client {
+func NewHTTPClient(cfg HTTPClientConfig) HTTPClient {
 	return &client{
 		httpClient:     &http.Client{Timeout: cfg.Timeout},
 		maxRetries:     cfg.MaxRetries,
@@ -37,7 +37,7 @@ func (c *client) Do(ctx context.Context, method, url string, body interface{}, h
 	if body != nil {
 		data, err := json.Marshal(body)
 		if err != nil {
-			return nil, fmt.Errorf("%w: %v", ErrMarshalBody, err)
+			return nil, fmt.Errorf("%w: %v", ErrHTTPMarshalBody, err)
 		}
 		bodyReader = bytes.NewReader(data)
 	}
@@ -59,7 +59,7 @@ func (c *client) Do(ctx context.Context, method, url string, body interface{}, h
 
 		req, err := http.NewRequestWithContext(ctx, method, url, bodyReader)
 		if err != nil {
-			return nil, fmt.Errorf("%w: %v", ErrRequestFailed, err)
+			return nil, fmt.Errorf("%w: %v", ErrHTTPRequestFailed, err)
 		}
 
 		req.Header.Set("Content-Type", "application/json")
@@ -72,20 +72,20 @@ func (c *client) Do(ctx context.Context, method, url string, body interface{}, h
 
 		resp, err := c.httpClient.Do(req)
 		if err != nil {
-			lastErr = fmt.Errorf("%w: %v", ErrRequestFailed, err)
+			lastErr = fmt.Errorf("%w: %v", ErrHTTPRequestFailed, err)
 			continue
 		}
 
 		if resp.StatusCode >= 500 && attempt < c.maxRetries {
 			resp.Body.Close()
-			lastErr = fmt.Errorf("%w: status %d", ErrRequestFailed, resp.StatusCode)
+			lastErr = fmt.Errorf("%w: status %d", ErrHTTPRequestFailed, resp.StatusCode)
 			continue
 		}
 
 		return resp, nil
 	}
 
-	return nil, fmt.Errorf("%w: %v", ErrMaxRetries, lastErr)
+	return nil, fmt.Errorf("%w: %v", ErrHTTPMaxRetries, lastErr)
 }
 
 func (c *client) Get(ctx context.Context, url string, headers map[string]string) (*http.Response, error) {

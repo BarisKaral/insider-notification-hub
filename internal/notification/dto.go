@@ -6,9 +6,9 @@ import (
 	"github.com/google/uuid"
 )
 
-// CreateRequest represents the payload for creating a single notification.
+// NotificationCreateRequest represents the payload for creating a single notification.
 // Either Content or (TemplateID + Variables) must be provided, but not both.
-type CreateRequest struct {
+type NotificationCreateRequest struct {
 	Recipient   string            `json:"recipient" validate:"required"`
 	Channel     string            `json:"channel" validate:"required,oneof=sms email push"`
 	Content     *string           `json:"content,omitempty"`
@@ -18,13 +18,13 @@ type CreateRequest struct {
 	Variables   map[string]string `json:"variables,omitempty"`
 }
 
-// BatchCreateRequest represents the payload for creating multiple notifications at once.
-type BatchCreateRequest struct {
-	Notifications []CreateRequest `json:"notifications" validate:"required,min=1,max=1000"`
+// NotificationBatchCreateRequest represents the payload for creating multiple notifications at once.
+type NotificationBatchCreateRequest struct {
+	Notifications []NotificationCreateRequest `json:"notifications" validate:"required,min=1,max=1000"`
 }
 
-// ListFilter holds query parameters for listing notifications.
-type ListFilter struct {
+// NotificationListFilter holds query parameters for listing notifications.
+type NotificationListFilter struct {
 	Status    string
 	Channel   string
 	StartDate *time.Time
@@ -52,22 +52,22 @@ type NotificationResponse struct {
 	CreatedAt     time.Time  `json:"createdAt"`
 }
 
-// PaginatedResponse wraps a list of notifications with pagination metadata.
-type PaginatedResponse struct {
+// NotificationPaginatedResponse wraps a list of notifications with pagination metadata.
+type NotificationPaginatedResponse struct {
 	Items  []NotificationResponse `json:"items"`
 	Total  int64                  `json:"total"`
 	Limit  int                    `json:"limit"`
 	Offset int                    `json:"offset"`
 }
 
-// BatchResponse wraps a batch of notifications with their shared batch ID.
-type BatchResponse struct {
+// NotificationBatchResponse wraps a batch of notifications with their shared batch ID.
+type NotificationBatchResponse struct {
 	BatchID       uuid.UUID              `json:"batchId"`
 	Notifications []NotificationResponse `json:"notifications"`
 }
 
-// ToResponse maps a Notification entity to a NotificationResponse DTO.
-func ToResponse(n *Notification) NotificationResponse {
+// ToNotificationResponse maps a Notification entity to a NotificationResponse DTO.
+func ToNotificationResponse(n *Notification) NotificationResponse {
 	return NotificationResponse{
 		ID:            n.ID,
 		Recipient:     n.Recipient,
@@ -87,11 +87,11 @@ func ToResponse(n *Notification) NotificationResponse {
 	}
 }
 
-// ToResponseList maps a slice of Notification entities to a slice of NotificationResponse DTOs.
-func ToResponseList(notifications []*Notification) []NotificationResponse {
+// ToNotificationResponseList maps a slice of Notification entities to a slice of NotificationResponse DTOs.
+func ToNotificationResponseList(notifications []*Notification) []NotificationResponse {
 	responses := make([]NotificationResponse, len(notifications))
 	for i, n := range notifications {
-		responses[i] = ToResponse(n)
+		responses[i] = ToNotificationResponse(n)
 	}
 	return responses
 }

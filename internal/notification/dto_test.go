@@ -12,10 +12,10 @@ func strPtr(s string) *string       { return &s }
 func uuidPtr(u uuid.UUID) *uuid.UUID { return &u }
 func timePtr(t time.Time) *time.Time { return &t }
 
-// --- CreateRequest Validation Tests ---
+// --- NotificationCreateRequest Validation Tests ---
 
 func TestDTO_CreateRequest_ValidWithContent(t *testing.T) {
-	req := CreateRequest{
+	req := NotificationCreateRequest{
 		Recipient: "user@example.com",
 		Channel:   "email",
 		Content:   strPtr("Hello, world!"),
@@ -26,7 +26,7 @@ func TestDTO_CreateRequest_ValidWithContent(t *testing.T) {
 }
 
 func TestDTO_CreateRequest_ValidWithTemplate(t *testing.T) {
-	req := CreateRequest{
+	req := NotificationCreateRequest{
 		Recipient:  "user@example.com",
 		Channel:    "sms",
 		TemplateID: uuidPtr(uuid.New()),
@@ -38,7 +38,7 @@ func TestDTO_CreateRequest_ValidWithTemplate(t *testing.T) {
 }
 
 func TestDTO_CreateRequest_ContentXORTemplate_BothProvided(t *testing.T) {
-	req := CreateRequest{
+	req := NotificationCreateRequest{
 		Recipient:  "user@example.com",
 		Channel:    "email",
 		Content:    strPtr("Hello"),
@@ -54,7 +54,7 @@ func TestDTO_CreateRequest_ContentXORTemplate_BothProvided(t *testing.T) {
 }
 
 func TestDTO_CreateRequest_ContentXORTemplate_NeitherProvided(t *testing.T) {
-	req := CreateRequest{
+	req := NotificationCreateRequest{
 		Recipient: "user@example.com",
 		Channel:   "email",
 	}
@@ -68,7 +68,7 @@ func TestDTO_CreateRequest_ContentXORTemplate_NeitherProvided(t *testing.T) {
 }
 
 func TestDTO_CreateRequest_ContentXORTemplate_EmptyContent(t *testing.T) {
-	req := CreateRequest{
+	req := NotificationCreateRequest{
 		Recipient: "user@example.com",
 		Channel:   "email",
 		Content:   strPtr(""),
@@ -81,7 +81,7 @@ func TestDTO_CreateRequest_ContentXORTemplate_EmptyContent(t *testing.T) {
 
 func TestDTO_CreateRequest_SMSContentLimit(t *testing.T) {
 	content := strings.Repeat("a", 161)
-	req := CreateRequest{
+	req := NotificationCreateRequest{
 		Recipient: "+1234567890",
 		Channel:   "sms",
 		Content:   &content,
@@ -97,7 +97,7 @@ func TestDTO_CreateRequest_SMSContentLimit(t *testing.T) {
 
 func TestDTO_CreateRequest_SMSContentAtLimit(t *testing.T) {
 	content := strings.Repeat("a", 160)
-	req := CreateRequest{
+	req := NotificationCreateRequest{
 		Recipient: "+1234567890",
 		Channel:   "sms",
 		Content:   &content,
@@ -109,7 +109,7 @@ func TestDTO_CreateRequest_SMSContentAtLimit(t *testing.T) {
 
 func TestDTO_CreateRequest_EmailContentLimit(t *testing.T) {
 	content := strings.Repeat("a", 10001)
-	req := CreateRequest{
+	req := NotificationCreateRequest{
 		Recipient: "user@example.com",
 		Channel:   "email",
 		Content:   &content,
@@ -125,7 +125,7 @@ func TestDTO_CreateRequest_EmailContentLimit(t *testing.T) {
 
 func TestDTO_CreateRequest_EmailContentAtLimit(t *testing.T) {
 	content := strings.Repeat("a", 10000)
-	req := CreateRequest{
+	req := NotificationCreateRequest{
 		Recipient: "user@example.com",
 		Channel:   "email",
 		Content:   &content,
@@ -137,7 +137,7 @@ func TestDTO_CreateRequest_EmailContentAtLimit(t *testing.T) {
 
 func TestDTO_CreateRequest_PushContentLimit(t *testing.T) {
 	content := strings.Repeat("a", 257)
-	req := CreateRequest{
+	req := NotificationCreateRequest{
 		Recipient: "device-token-123",
 		Channel:   "push",
 		Content:   &content,
@@ -153,7 +153,7 @@ func TestDTO_CreateRequest_PushContentLimit(t *testing.T) {
 
 func TestDTO_CreateRequest_PushContentAtLimit(t *testing.T) {
 	content := strings.Repeat("a", 256)
-	req := CreateRequest{
+	req := NotificationCreateRequest{
 		Recipient: "device-token-123",
 		Channel:   "push",
 		Content:   &content,
@@ -164,7 +164,7 @@ func TestDTO_CreateRequest_PushContentAtLimit(t *testing.T) {
 }
 
 func TestDTO_CreateRequest_DefaultPriority(t *testing.T) {
-	req := CreateRequest{
+	req := NotificationCreateRequest{
 		Recipient: "user@example.com",
 		Channel:   "email",
 		Content:   strPtr("Hello"),
@@ -178,7 +178,7 @@ func TestDTO_CreateRequest_DefaultPriority(t *testing.T) {
 }
 
 func TestDTO_CreateRequest_InvalidChannel(t *testing.T) {
-	req := CreateRequest{
+	req := NotificationCreateRequest{
 		Recipient: "user@example.com",
 		Channel:   "pigeon",
 		Content:   strPtr("Hello"),
@@ -190,7 +190,7 @@ func TestDTO_CreateRequest_InvalidChannel(t *testing.T) {
 }
 
 func TestDTO_CreateRequest_InvalidPriority(t *testing.T) {
-	req := CreateRequest{
+	req := NotificationCreateRequest{
 		Recipient: "user@example.com",
 		Channel:   "email",
 		Content:   strPtr("Hello"),
@@ -203,7 +203,7 @@ func TestDTO_CreateRequest_InvalidPriority(t *testing.T) {
 }
 
 func TestDTO_CreateRequest_MissingRecipient(t *testing.T) {
-	req := CreateRequest{
+	req := NotificationCreateRequest{
 		Channel: "email",
 		Content: strPtr("Hello"),
 	}
@@ -214,7 +214,7 @@ func TestDTO_CreateRequest_MissingRecipient(t *testing.T) {
 }
 
 func TestDTO_CreateRequest_MissingChannel(t *testing.T) {
-	req := CreateRequest{
+	req := NotificationCreateRequest{
 		Recipient: "user@example.com",
 		Content:   strPtr("Hello"),
 	}
@@ -226,7 +226,7 @@ func TestDTO_CreateRequest_MissingChannel(t *testing.T) {
 
 func TestDTO_CreateRequest_WithScheduledAt(t *testing.T) {
 	future := time.Now().Add(1 * time.Hour)
-	req := CreateRequest{
+	req := NotificationCreateRequest{
 		Recipient:   "user@example.com",
 		Channel:     "email",
 		Content:     strPtr("Scheduled message"),
@@ -237,11 +237,11 @@ func TestDTO_CreateRequest_WithScheduledAt(t *testing.T) {
 	}
 }
 
-// --- BatchCreateRequest Validation Tests ---
+// --- NotificationBatchCreateRequest Validation Tests ---
 
 func TestDTO_BatchCreateRequest_Valid(t *testing.T) {
-	req := BatchCreateRequest{
-		Notifications: []CreateRequest{
+	req := NotificationBatchCreateRequest{
+		Notifications: []NotificationCreateRequest{
 			{Recipient: "a@b.com", Channel: "email", Content: strPtr("Hello")},
 			{Recipient: "b@b.com", Channel: "sms", Content: strPtr("Hi")},
 		},
@@ -252,8 +252,8 @@ func TestDTO_BatchCreateRequest_Valid(t *testing.T) {
 }
 
 func TestDTO_BatchCreateRequest_Empty(t *testing.T) {
-	req := BatchCreateRequest{
-		Notifications: []CreateRequest{},
+	req := NotificationBatchCreateRequest{
+		Notifications: []NotificationCreateRequest{},
 	}
 	err := req.Validate()
 	if err == nil {
@@ -262,7 +262,7 @@ func TestDTO_BatchCreateRequest_Empty(t *testing.T) {
 }
 
 func TestDTO_BatchCreateRequest_Nil(t *testing.T) {
-	req := BatchCreateRequest{}
+	req := NotificationBatchCreateRequest{}
 	err := req.Validate()
 	if err == nil {
 		t.Fatal("expected error for nil batch")
@@ -270,15 +270,15 @@ func TestDTO_BatchCreateRequest_Nil(t *testing.T) {
 }
 
 func TestDTO_BatchCreateRequest_ExceedsMax(t *testing.T) {
-	notifications := make([]CreateRequest, 1001)
+	notifications := make([]NotificationCreateRequest, 1001)
 	for i := range notifications {
-		notifications[i] = CreateRequest{
+		notifications[i] = NotificationCreateRequest{
 			Recipient: "user@example.com",
 			Channel:   "email",
 			Content:   strPtr("Hello"),
 		}
 	}
-	req := BatchCreateRequest{Notifications: notifications}
+	req := NotificationBatchCreateRequest{Notifications: notifications}
 	err := req.Validate()
 	if err == nil {
 		t.Fatal("expected error for batch exceeding 1000")
@@ -286,23 +286,23 @@ func TestDTO_BatchCreateRequest_ExceedsMax(t *testing.T) {
 }
 
 func TestDTO_BatchCreateRequest_AtMax(t *testing.T) {
-	notifications := make([]CreateRequest, 1000)
+	notifications := make([]NotificationCreateRequest, 1000)
 	for i := range notifications {
-		notifications[i] = CreateRequest{
+		notifications[i] = NotificationCreateRequest{
 			Recipient: "user@example.com",
 			Channel:   "email",
 			Content:   strPtr("Hello"),
 		}
 	}
-	req := BatchCreateRequest{Notifications: notifications}
+	req := NotificationBatchCreateRequest{Notifications: notifications}
 	if err := req.Validate(); err != nil {
 		t.Fatalf("expected no error for batch of 1000, got: %v", err)
 	}
 }
 
 func TestDTO_BatchCreateRequest_InvalidNotification(t *testing.T) {
-	req := BatchCreateRequest{
-		Notifications: []CreateRequest{
+	req := NotificationBatchCreateRequest{
+		Notifications: []NotificationCreateRequest{
 			{Recipient: "a@b.com", Channel: "email", Content: strPtr("OK")},
 			{Recipient: "", Channel: "email", Content: strPtr("Missing recipient")},
 		},
@@ -316,10 +316,10 @@ func TestDTO_BatchCreateRequest_InvalidNotification(t *testing.T) {
 	}
 }
 
-// --- ListFilter Tests ---
+// --- NotificationListFilter Tests ---
 
 func TestDTO_ListFilter_Defaults(t *testing.T) {
-	f := ListFilter{}
+	f := NotificationListFilter{}
 	f.Normalize()
 	if f.Limit != 20 {
 		t.Fatalf("expected default limit 20, got: %d", f.Limit)
@@ -330,7 +330,7 @@ func TestDTO_ListFilter_Defaults(t *testing.T) {
 }
 
 func TestDTO_ListFilter_CapsLimit(t *testing.T) {
-	f := ListFilter{Limit: 200}
+	f := NotificationListFilter{Limit: 200}
 	f.Normalize()
 	if f.Limit != 100 {
 		t.Fatalf("expected limit capped at 100, got: %d", f.Limit)
@@ -338,14 +338,14 @@ func TestDTO_ListFilter_CapsLimit(t *testing.T) {
 }
 
 func TestDTO_ListFilter_NegativeOffset(t *testing.T) {
-	f := ListFilter{Offset: -5}
+	f := NotificationListFilter{Offset: -5}
 	f.Normalize()
 	if f.Offset != 0 {
 		t.Fatalf("expected offset normalized to 0, got: %d", f.Offset)
 	}
 }
 
-// --- ToResponse / ToResponseList Tests ---
+// --- ToNotificationResponse / ToNotificationResponseList Tests ---
 
 func TestDTO_ToResponse(t *testing.T) {
 	id := uuid.New()
@@ -355,10 +355,10 @@ func TestDTO_ToResponse(t *testing.T) {
 	n := &Notification{
 		ID:            id,
 		Recipient:     "user@example.com",
-		Channel:       ChannelEmail,
+		Channel:       NotificationChannelEmail,
 		Content:       "Hello",
-		Priority:      PriorityHigh,
-		Status:        StatusSent,
+		Priority:      NotificationPriorityHigh,
+		Status:        NotificationStatusSent,
 		BatchID:       &batchID,
 		ProviderMsgID: strPtr("msg-123"),
 		RetryCount:    2,
@@ -366,7 +366,7 @@ func TestDTO_ToResponse(t *testing.T) {
 		CreatedAt:     now,
 	}
 
-	resp := ToResponse(n)
+	resp := ToNotificationResponse(n)
 
 	if resp.ID != id {
 		t.Fatalf("expected ID %s, got %s", id, resp.ID)
@@ -398,10 +398,10 @@ func TestDTO_ToResponse(t *testing.T) {
 }
 
 func TestDTO_ToResponseList(t *testing.T) {
-	n1 := &Notification{ID: uuid.New(), Channel: ChannelSMS, Priority: PriorityNormal, Status: StatusPending, CreatedAt: time.Now()}
-	n2 := &Notification{ID: uuid.New(), Channel: ChannelEmail, Priority: PriorityLow, Status: StatusQueued, CreatedAt: time.Now()}
+	n1 := &Notification{ID: uuid.New(), Channel: NotificationChannelSMS, Priority: NotificationPriorityNormal, Status: NotificationStatusPending, CreatedAt: time.Now()}
+	n2 := &Notification{ID: uuid.New(), Channel: NotificationChannelEmail, Priority: NotificationPriorityLow, Status: NotificationStatusQueued, CreatedAt: time.Now()}
 
-	responses := ToResponseList([]*Notification{n1, n2})
+	responses := ToNotificationResponseList([]*Notification{n1, n2})
 
 	if len(responses) != 2 {
 		t.Fatalf("expected 2 responses, got %d", len(responses))
@@ -415,7 +415,7 @@ func TestDTO_ToResponseList(t *testing.T) {
 }
 
 func TestDTO_ToResponseList_Empty(t *testing.T) {
-	responses := ToResponseList([]*Notification{})
+	responses := ToNotificationResponseList([]*Notification{})
 	if len(responses) != 0 {
 		t.Fatalf("expected 0 responses, got %d", len(responses))
 	}

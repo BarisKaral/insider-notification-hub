@@ -9,7 +9,7 @@ import (
 	"gorm.io/gorm"
 )
 
-type Repository interface {
+type TemplateRepository interface {
 	Create(ctx context.Context, t *Template) error
 	GetByID(ctx context.Context, id uuid.UUID) (*Template, error)
 	List(ctx context.Context, limit, offset int) ([]*Template, int64, error)
@@ -21,9 +21,9 @@ type repository struct {
 	db *gorm.DB
 }
 
-var _ Repository = (*repository)(nil)
+var _ TemplateRepository = (*repository)(nil)
 
-func NewRepository(db *gorm.DB) Repository {
+func NewTemplateRepository(db *gorm.DB) TemplateRepository {
 	return &repository{db: db}
 }
 

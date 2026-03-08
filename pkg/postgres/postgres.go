@@ -9,7 +9,7 @@ import (
 	"gorm.io/gorm/logger"
 )
 
-type Config struct {
+type PostgresConfig struct {
 	Host     string
 	Port     string
 	User     string
@@ -18,14 +18,14 @@ type Config struct {
 	SSLMode  string
 }
 
-func (c Config) DSN() string {
+func (c PostgresConfig) DSN() string {
 	return fmt.Sprintf(
 		"host=%s port=%s user=%s password=%s dbname=%s sslmode=%s TimeZone=UTC",
 		c.Host, c.Port, c.User, c.Password, c.Name, c.SSLMode,
 	)
 }
 
-func NewDB(cfg Config) (*gorm.DB, error) {
+func NewPostgresDB(cfg PostgresConfig) (*gorm.DB, error) {
 	db, err := gorm.Open(postgres.Open(cfg.DSN()), &gorm.Config{
 		Logger:  logger.Default.LogMode(logger.Silent),
 		NowFunc: func() time.Time { return time.Now().UTC() },

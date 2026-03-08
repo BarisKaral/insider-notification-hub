@@ -6,12 +6,12 @@ import (
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
-type Connection interface {
+type RabbitMQConnection interface {
 	Channel() (*amqp.Channel, error)
 	Close() error
 }
 
-type Config struct {
+type RabbitMQConfig struct {
 	URL string
 }
 
@@ -19,10 +19,10 @@ type connection struct {
 	conn *amqp.Connection
 }
 
-func NewConnection(cfg Config) (Connection, error) {
+func NewRabbitMQConnection(cfg RabbitMQConfig) (RabbitMQConnection, error) {
 	conn, err := amqp.Dial(cfg.URL)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrConnectionFailed, err)
+		return nil, fmt.Errorf("%w: %v", ErrRabbitMQConnectionFailed, err)
 	}
 	return &connection{conn: conn}, nil
 }
@@ -30,7 +30,7 @@ func NewConnection(cfg Config) (Connection, error) {
 func (c *connection) Channel() (*amqp.Channel, error) {
 	ch, err := c.conn.Channel()
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrChannelFailed, err)
+		return nil, fmt.Errorf("%w: %v", ErrRabbitMQChannelFailed, err)
 	}
 	return ch, nil
 }
@@ -39,7 +39,7 @@ func (c *connection) Close() error {
 	return c.conn.Close()
 }
 
-func SetupQueues(ch *amqp.Channel) error {
+func SetupRabbitMQQueues(ch *amqp.Channel) error {
 	// Declare exchanges
 	exchanges := []struct {
 		name string
@@ -52,7 +52,7 @@ func SetupQueues(ch *amqp.Channel) error {
 
 	for _, ex := range exchanges {
 		if err := ch.ExchangeDeclare(ex.name, ex.kind, true, false, false, false, nil); err != nil {
-			return fmt.Errorf("%w: exchange %s: %v", ErrQueueSetupFailed, ex.name, err)
+			return fmt.Errorf("%w: exchange %s: %v", ErrRabbitMQQueueSetupFailed, ex.name, err)
 		}
 	}
 
@@ -67,20 +67,20 @@ func SetupQueues(ch *amqp.Channel) error {
 			"x-max-priority":            int32(3),
 		})
 		if err != nil {
-			return fmt.Errorf("%w: queue %s: %v", ErrQueueSetupFailed, mainQueue, err)
+			return fmt.Errorf("%w: queue %s: %v", ErrRabbitMQQueueSetupFailed, mainQueue, err)
 		}
 		if err := ch.QueueBind(mainQueue, channel, "notification.exchange", false, nil); err != nil {
-			return fmt.Errorf("%w: bind %s: %v", ErrQueueSetupFailed, mainQueue, err)
+			return fmt.Errorf("%w: bind %s: %v", ErrRabbitMQQueueSetupFailed, mainQueue, err)
 		}
 
 		// DLQ
 		dlq := fmt.Sprintf("notification.dlq.%s", channel)
 		_, err = ch.QueueDeclare(dlq, true, false, false, false, nil)
 		if err != nil {
-			return fmt.Errorf("%w: queue %s: %v", ErrQueueSetupFailed, dlq, err)
+			return fmt.Errorf("%w: queue %s: %v", ErrRabbitMQQueueSetupFailed, dlq, err)
 		}
 		if err := ch.QueueBind(dlq, channel, "notification.dlx", false, nil); err != nil {
-			return fmt.Errorf("%w: bind %s: %v", ErrQueueSetupFailed, dlq, err)
+			return fmt.Errorf("%w: bind %s: %v", ErrRabbitMQQueueSetupFailed, dlq, err)
 		}
 
 		// Retry queue with TTL, DLX back to main exchange
@@ -91,10 +91,10 @@ func SetupQueues(ch *amqp.Channel) error {
 			"x-message-ttl":             int32(30000),
 		})
 		if err != nil {
-			return fmt.Errorf("%w: queue %s: %v", ErrQueueSetupFailed, retryQueue, err)
+			return fmt.Errorf("%w: queue %s: %v", ErrRabbitMQQueueSetupFailed, retryQueue, err)
 		}
 		if err := ch.QueueBind(retryQueue, channel, "notification.retry.exchange", false, nil); err != nil {
-			return fmt.Errorf("%w: bind %s: %v", ErrQueueSetupFailed, retryQueue, err)
+			return fmt.Errorf("%w: bind %s: %v", ErrRabbitMQQueueSetupFailed, retryQueue, err)
 		}
 	}
 

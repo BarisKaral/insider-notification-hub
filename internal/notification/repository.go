@@ -11,13 +11,13 @@ import (
 	"gorm.io/gorm/clause"
 )
 
-// Repository defines the data access interface for notifications.
-type Repository interface {
+// NotificationRepository defines the data access interface for notifications.
+type NotificationRepository interface {
 	Create(ctx context.Context, n *Notification) error
 	CreateBatch(ctx context.Context, notifications []*Notification) error
 	GetByID(ctx context.Context, id uuid.UUID) (*Notification, error)
 	GetByBatchID(ctx context.Context, batchID uuid.UUID) ([]*Notification, error)
-	List(ctx context.Context, filter ListFilter) ([]*Notification, int64, error)
+	List(ctx context.Context, filter NotificationListFilter) ([]*Notification, int64, error)
 	Update(ctx context.Context, n *Notification) error
 	GetByIdempotencyKey(ctx context.Context, key string) (*Notification, error)
 	GetForProcessing(ctx context.Context, id uuid.UUID) (*Notification, error)
@@ -29,18 +29,18 @@ type repository struct {
 	db *gorm.DB
 }
 
-var _ Repository = (*repository)(nil)
+var _ NotificationRepository = (*repository)(nil)
 
-func NewRepository(db *gorm.DB) Repository {
+func NewNotificationRepository(db *gorm.DB) NotificationRepository {
 	return &repository{db: db}
 }
 
 func (r *repository) Create(ctx context.Context, n *Notification) error {
 	if err := r.db.WithContext(ctx).Create(n).Error; err != nil {
 		if isUniqueViolation(err) {
-			return ErrDuplicateIdempotencyKey.WithError(err)
+			return ErrNotificationDuplicateIdempotencyKey.WithError(err)
 		}
-		return ErrCreateFailed.WithError(err)
+		return ErrNotificationCreateFailed.WithError(err)
 	}
 	return nil
 }
@@ -48,9 +48,9 @@ func (r *repository) Create(ctx context.Context, n *Notification) error {
 func (r *repository) CreateBatch(ctx context.Context, notifications []*Notification) error {
 	if err := r.db.WithContext(ctx).Create(notifications).Error; err != nil {
 		if isUniqueViolation(err) {
-			return ErrDuplicateIdempotencyKey.WithError(err)
+			return ErrNotificationDuplicateIdempotencyKey.WithError(err)
 		}
-		return ErrCreateFailed.WithError(err)
+		return ErrNotificationCreateFailed.WithError(err)
 	}
 	return nil
 }
@@ -59,9 +59,9 @@ func (r *repository) GetByID(ctx context.Context, id uuid.UUID) (*Notification, 
 	var n Notification
 	if err := r.db.WithContext(ctx).Where("id = ?", id).First(&n).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, ErrNotFound
+			return nil, ErrNotificationNotFound
 		}
-		return nil, ErrNotFound.WithError(err)
+		return nil, ErrNotificationNotFound.WithError(err)
 	}
 	return &n, nil
 }
@@ -69,12 +69,12 @@ func (r *repository) GetByID(ctx context.Context, id uuid.UUID) (*Notification, 
 func (r *repository) GetByBatchID(ctx context.Context, batchID uuid.UUID) ([]*Notification, error) {
 	var notifications []*Notification
 	if err := r.db.WithContext(ctx).Where("batch_id = ?", batchID).Find(&notifications).Error; err != nil {
-		return nil, ErrNotFound.WithError(err)
+		return nil, ErrNotificationNotFound.WithError(err)
 	}
 	return notifications, nil
 }
 
-func (r *repository) List(ctx context.Context, filter ListFilter) ([]*Notification, int64, error) {
+func (r *repository) List(ctx context.Context, filter NotificationListFilter) ([]*Notification, int64, error) {
 	query := r.db.WithContext(ctx).Model(&Notification{})
 
 	if filter.Status != "" {
@@ -127,9 +127,9 @@ func (r *repository) GetForProcessing(ctx context.Context, id uuid.UUID) (*Notif
 		Where("id = ?", id).
 		First(&n).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, ErrNotFound
+			return nil, ErrNotificationNotFound
 		}
-		return nil, ErrNotFound.WithError(err)
+		return nil, ErrNotificationNotFound.WithError(err)
 	}
 	return &n, nil
 }
@@ -140,7 +140,7 @@ func (r *repository) GetRecoverableNotifications(ctx context.Context, staleDurat
 	var notifications []*Notification
 	cutoff := time.Now().UTC().Add(-staleDuration)
 	if err := r.db.WithContext(ctx).
-		Where("status = ? AND created_at < ?", StatusPending, cutoff).
+		Where("status = ? AND created_at < ?", NotificationStatusPending, cutoff).
 		Find(&notifications).Error; err != nil {
 		return nil, err
 	}
@@ -151,7 +151,7 @@ func (r *repository) GetRecoverableNotifications(ctx context.Context, staleDurat
 func (r *repository) GetDueScheduledNotifications(ctx context.Context) ([]*Notification, error) {
 	var notifications []*Notification
 	if err := r.db.WithContext(ctx).
-		Where("status = ? AND scheduled_at <= ?", StatusScheduled, time.Now().UTC()).
+		Where("status = ? AND scheduled_at <= ?", NotificationStatusScheduled, time.Now().UTC()).
 		Find(&notifications).Error; err != nil {
 		return nil, err
 	}

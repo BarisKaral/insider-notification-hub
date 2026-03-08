@@ -11,26 +11,26 @@ import (
 
 var validate = validator.New()
 
-type CreateRequest struct {
+type TemplateCreateRequest struct {
 	Name    string `json:"name" validate:"required"`
 	Channel string `json:"channel" validate:"required,oneof=sms email push"`
 	Content string `json:"content" validate:"required"`
 }
 
-func (r *CreateRequest) Validate() error {
+func (r *TemplateCreateRequest) Validate() error {
 	if err := validate.Struct(r); err != nil {
 		return errs.NewAppError("VALIDATION_ERROR", err.Error(), http.StatusBadRequest)
 	}
 	return nil
 }
 
-type UpdateRequest struct {
+type TemplateUpdateRequest struct {
 	Name    *string `json:"name,omitempty"`
 	Channel *string `json:"channel,omitempty" validate:"omitempty,oneof=sms email push"`
 	Content *string `json:"content,omitempty"`
 }
 
-func (r *UpdateRequest) Validate() error {
+func (r *TemplateUpdateRequest) Validate() error {
 	if err := validate.Struct(r); err != nil {
 		return errs.NewAppError("VALIDATION_ERROR", err.Error(), http.StatusBadRequest)
 	}
@@ -49,7 +49,7 @@ type TemplateResponse struct {
 	UpdatedAt time.Time `json:"updatedAt"`
 }
 
-func ToResponse(t *Template) TemplateResponse {
+func ToTemplateResponse(t *Template) TemplateResponse {
 	return TemplateResponse{
 		ID:        t.ID,
 		Name:      t.Name,
@@ -60,10 +60,10 @@ func ToResponse(t *Template) TemplateResponse {
 	}
 }
 
-func ToResponseList(templates []*Template) []TemplateResponse {
+func ToTemplateResponseList(templates []*Template) []TemplateResponse {
 	responses := make([]TemplateResponse, len(templates))
 	for i, t := range templates {
-		responses[i] = ToResponse(t)
+		responses[i] = ToTemplateResponse(t)
 	}
 	return responses
 }

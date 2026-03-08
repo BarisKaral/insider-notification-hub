@@ -3,6 +3,6 @@ package postgres
 import "errors"
 
 var (
-	ErrConnectionFailed = errors.New("database connection failed")
-	ErrPingFailed       = errors.New("database ping failed")
+	ErrPostgresConnectionFailed = errors.New("database connection failed")
+	ErrPostgresPingFailed       = errors.New("database ping failed")
 )

@@ -1,20 +1,20 @@
 package notification
 
-type Priority string
+type NotificationPriority string
 
 const (
-	PriorityHigh   Priority = "high"
-	PriorityNormal Priority = "normal"
-	PriorityLow    Priority = "low"
+	NotificationPriorityHigh   NotificationPriority = "high"
+	NotificationPriorityNormal NotificationPriority = "normal"
+	NotificationPriorityLow    NotificationPriority = "low"
 )
 
-func (p Priority) ToUint8() uint8 {
+func (p NotificationPriority) ToUint8() uint8 {
 	switch p {
-	case PriorityHigh:
+	case NotificationPriorityHigh:
 		return 3
-	case PriorityNormal:
+	case NotificationPriorityNormal:
 		return 2
-	case PriorityLow:
+	case NotificationPriorityLow:
 		return 1
 	default:
 		return 2

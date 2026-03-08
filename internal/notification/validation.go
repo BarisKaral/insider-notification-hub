@@ -18,15 +18,15 @@ const (
 	maxPushLength  = 256
 )
 
-// Normalize applies defaults to CreateRequest fields.
-func (r *CreateRequest) Normalize() {
+// Normalize applies defaults to NotificationCreateRequest fields.
+func (r *NotificationCreateRequest) Normalize() {
 	if r.Priority == "" {
-		r.Priority = string(PriorityNormal)
+		r.Priority = string(NotificationPriorityNormal)
 	}
 }
 
 // Validate normalizes defaults and performs struct-level validation and custom business rules.
-func (r *CreateRequest) Validate() error {
+func (r *NotificationCreateRequest) Validate() error {
 	r.Normalize()
 
 	// Struct tag validation.
@@ -55,7 +55,7 @@ func (r *CreateRequest) Validate() error {
 
 	// Channel-specific content length limits using rune count for proper Unicode support.
 	if hasContent {
-		limit := channelContentLimit(Channel(r.Channel))
+		limit := channelContentLimit(NotificationChannel(r.Channel))
 		if utf8.RuneCountInString(*r.Content) > limit {
 			return errs.NewAppError(
 				"VALIDATION_ERROR",
@@ -69,13 +69,13 @@ func (r *CreateRequest) Validate() error {
 }
 
 // channelContentLimit returns the maximum content length for a given channel.
-func channelContentLimit(ch Channel) int {
+func channelContentLimit(ch NotificationChannel) int {
 	switch ch {
-	case ChannelSMS:
+	case NotificationChannelSMS:
 		return maxSMSLength
-	case ChannelEmail:
+	case NotificationChannelEmail:
 		return maxEmailLength
-	case ChannelPush:
+	case NotificationChannelPush:
 		return maxPushLength
 	default:
 		return maxEmailLength
@@ -83,7 +83,7 @@ func channelContentLimit(ch Channel) int {
 }
 
 // Validate validates the batch request and each individual notification.
-func (r *BatchCreateRequest) Validate() error {
+func (r *NotificationBatchCreateRequest) Validate() error {
 	if err := validate.Struct(r); err != nil {
 		return errs.NewAppError("VALIDATION_ERROR", err.Error(), http.StatusBadRequest)
 	}
@@ -106,7 +106,7 @@ func (r *BatchCreateRequest) Validate() error {
 }
 
 // Normalize applies default values and caps to the filter.
-func (f *ListFilter) Normalize() {
+func (f *NotificationListFilter) Normalize() {
 	if f.Limit <= 0 {
 		f.Limit = 20
 	}

@@ -7,7 +7,7 @@ import (
 	"github.com/gofiber/fiber/v2/middleware/requestid"
 )
 
-func Setup(app *fiber.App) {
+func SetupMiddleware(app *fiber.App) {
 	app.Use(recover.New())
 	app.Use(requestid.New())
 	app.Use(cors.New(cors.Config{

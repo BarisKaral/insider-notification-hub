@@ -11,9 +11,9 @@ import (
 type Notification struct {
 	ID             uuid.UUID          `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
 	Recipient      string             `gorm:"not null;index" json:"recipient"`
-	Channel        Channel            `gorm:"type:varchar(10);not null;index" json:"channel"`
+	Channel        NotificationChannel  `gorm:"type:varchar(10);not null;index" json:"channel"`
 	Content        string             `gorm:"type:text;not null" json:"content"`
-	Priority       Priority           `gorm:"type:varchar(10);not null;default:'normal';index" json:"priority"`
+	Priority       NotificationPriority `gorm:"type:varchar(10);not null;default:'normal';index" json:"priority"`
 	Status         NotificationStatus `gorm:"type:varchar(20);not null;default:'pending';index" json:"status"`
 	BatchID        *uuid.UUID         `gorm:"type:uuid;index" json:"batchId"`
 	IdempotencyKey *string            `gorm:"type:varchar(64);uniqueIndex" json:"-"`

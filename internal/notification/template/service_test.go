@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/mock"
 )
 
-// mockRepository implements Repository for testing.
+// mockRepository implements TemplateRepository for testing.
 type mockRepository struct {
 	mock.Mock
 }
@@ -44,7 +44,7 @@ func (m *mockRepository) Delete(ctx context.Context, id uuid.UUID) error {
 
 func TestRender_BasicVariableReplacement(t *testing.T) {
 	repo := new(mockRepository)
-	svc := NewService(repo)
+	svc := NewTemplateService(repo)
 	ctx := context.Background()
 	templateID := uuid.New()
 
@@ -65,7 +65,7 @@ func TestRender_BasicVariableReplacement(t *testing.T) {
 
 func TestRender_MultipleVariables(t *testing.T) {
 	repo := new(mockRepository)
-	svc := NewService(repo)
+	svc := NewTemplateService(repo)
 	ctx := context.Background()
 	templateID := uuid.New()
 
@@ -87,7 +87,7 @@ func TestRender_MultipleVariables(t *testing.T) {
 
 func TestRender_MissingVariable_PlaceholderStays(t *testing.T) {
 	repo := new(mockRepository)
-	svc := NewService(repo)
+	svc := NewTemplateService(repo)
 	ctx := context.Background()
 	templateID := uuid.New()
 
@@ -106,7 +106,7 @@ func TestRender_MissingVariable_PlaceholderStays(t *testing.T) {
 
 func TestRender_EmptyVariables(t *testing.T) {
 	repo := new(mockRepository)
-	svc := NewService(repo)
+	svc := NewTemplateService(repo)
 	ctx := context.Background()
 	templateID := uuid.New()
 
@@ -123,7 +123,7 @@ func TestRender_EmptyVariables(t *testing.T) {
 
 func TestRender_NilVariables(t *testing.T) {
 	repo := new(mockRepository)
-	svc := NewService(repo)
+	svc := NewTemplateService(repo)
 	ctx := context.Background()
 	templateID := uuid.New()
 
@@ -140,7 +140,7 @@ func TestRender_NilVariables(t *testing.T) {
 
 func TestRender_TemplateNotFound(t *testing.T) {
 	repo := new(mockRepository)
-	svc := NewService(repo)
+	svc := NewTemplateService(repo)
 	ctx := context.Background()
 	templateID := uuid.New()
 
@@ -155,7 +155,7 @@ func TestRender_TemplateNotFound(t *testing.T) {
 
 func TestRender_NoPlaceholders(t *testing.T) {
 	repo := new(mockRepository)
-	svc := NewService(repo)
+	svc := NewTemplateService(repo)
 	ctx := context.Background()
 	templateID := uuid.New()
 
@@ -172,7 +172,7 @@ func TestRender_NoPlaceholders(t *testing.T) {
 
 func TestRender_RepeatedPlaceholder(t *testing.T) {
 	repo := new(mockRepository)
-	svc := NewService(repo)
+	svc := NewTemplateService(repo)
 	ctx := context.Background()
 	templateID := uuid.New()
 
@@ -189,10 +189,10 @@ func TestRender_RepeatedPlaceholder(t *testing.T) {
 
 func TestCreate_Success(t *testing.T) {
 	repo := new(mockRepository)
-	svc := NewService(repo)
+	svc := NewTemplateService(repo)
 	ctx := context.Background()
 
-	req := CreateRequest{
+	req := TemplateCreateRequest{
 		Name:    "order_shipped",
 		Channel: "sms",
 		Content: "Your order {{orderId}} has been shipped.",
@@ -211,7 +211,7 @@ func TestCreate_Success(t *testing.T) {
 
 func TestUpdate_Success(t *testing.T) {
 	repo := new(mockRepository)
-	svc := NewService(repo)
+	svc := NewTemplateService(repo)
 	ctx := context.Background()
 	templateID := uuid.New()
 
@@ -228,7 +228,7 @@ func TestUpdate_Success(t *testing.T) {
 	repo.On("GetByID", ctx, templateID).Return(existing, nil)
 	repo.On("Update", ctx, existing).Return(nil)
 
-	tmpl, err := svc.Update(ctx, templateID, UpdateRequest{
+	tmpl, err := svc.Update(ctx, templateID, TemplateUpdateRequest{
 		Name:    &newName,
 		Content: &newContent,
 	})
@@ -242,14 +242,14 @@ func TestUpdate_Success(t *testing.T) {
 
 func TestUpdate_NotFound(t *testing.T) {
 	repo := new(mockRepository)
-	svc := NewService(repo)
+	svc := NewTemplateService(repo)
 	ctx := context.Background()
 	templateID := uuid.New()
 
 	repo.On("GetByID", ctx, templateID).Return(nil, ErrTemplateNotFound)
 
 	newName := "new_name"
-	tmpl, err := svc.Update(ctx, templateID, UpdateRequest{Name: &newName})
+	tmpl, err := svc.Update(ctx, templateID, TemplateUpdateRequest{Name: &newName})
 
 	assert.Nil(t, tmpl)
 	assert.Equal(t, ErrTemplateNotFound, err)
@@ -258,32 +258,32 @@ func TestUpdate_NotFound(t *testing.T) {
 func TestDTO_CreateRequest_Validate(t *testing.T) {
 	tests := []struct {
 		name    string
-		req     CreateRequest
+		req     TemplateCreateRequest
 		wantErr bool
 	}{
 		{
 			name:    "valid request",
-			req:     CreateRequest{Name: "test", Channel: "sms", Content: "hello"},
+			req:     TemplateCreateRequest{Name: "test", Channel: "sms", Content: "hello"},
 			wantErr: false,
 		},
 		{
 			name:    "missing name",
-			req:     CreateRequest{Channel: "sms", Content: "hello"},
+			req:     TemplateCreateRequest{Channel: "sms", Content: "hello"},
 			wantErr: true,
 		},
 		{
 			name:    "missing channel",
-			req:     CreateRequest{Name: "test", Content: "hello"},
+			req:     TemplateCreateRequest{Name: "test", Content: "hello"},
 			wantErr: true,
 		},
 		{
 			name:    "invalid channel",
-			req:     CreateRequest{Name: "test", Channel: "fax", Content: "hello"},
+			req:     TemplateCreateRequest{Name: "test", Channel: "fax", Content: "hello"},
 			wantErr: true,
 		},
 		{
 			name:    "missing content",
-			req:     CreateRequest{Name: "test", Channel: "sms"},
+			req:     TemplateCreateRequest{Name: "test", Channel: "sms"},
 			wantErr: true,
 		},
 	}
@@ -306,22 +306,22 @@ func TestDTO_UpdateRequest_Validate(t *testing.T) {
 
 	tests := []struct {
 		name    string
-		req     UpdateRequest
+		req     TemplateUpdateRequest
 		wantErr bool
 	}{
 		{
 			name:    "valid with name only",
-			req:     UpdateRequest{Name: &name},
+			req:     TemplateUpdateRequest{Name: &name},
 			wantErr: false,
 		},
 		{
 			name:    "no fields provided",
-			req:     UpdateRequest{},
+			req:     TemplateUpdateRequest{},
 			wantErr: true,
 		},
 		{
 			name:    "invalid channel",
-			req:     UpdateRequest{Channel: &invalidCh},
+			req:     TemplateUpdateRequest{Channel: &invalidCh},
 			wantErr: true,
 		},
 	}
@@ -347,7 +347,7 @@ func TestToResponse_MapsAllFields(t *testing.T) {
 		Content: "hello",
 	}
 
-	resp := ToResponse(tmpl)
+	resp := ToTemplateResponse(tmpl)
 
 	assert.Equal(t, id, resp.ID)
 	assert.Equal(t, "test", resp.Name)
@@ -361,7 +361,7 @@ func TestToResponseList_Maps(t *testing.T) {
 		{ID: uuid.New(), Name: "b"},
 	}
 
-	responses := ToResponseList(templates)
+	responses := ToTemplateResponseList(templates)
 
 	assert.Len(t, responses, 2)
 	assert.Equal(t, "a", responses[0].Name)

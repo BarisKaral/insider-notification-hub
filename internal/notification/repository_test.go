@@ -9,8 +9,8 @@ import (
 )
 
 func TestRepositoryInterfaceCompliance(t *testing.T) {
-	// Compile-time check: repository implements Repository
-	var _ Repository = (*repository)(nil)
+	// Compile-time check: repository implements NotificationRepository
+	var _ NotificationRepository = (*repository)(nil)
 }
 
 func TestIsUniqueViolation(t *testing.T) {
@@ -33,10 +33,10 @@ func TestToResponse_MapsAllFields(t *testing.T) {
 	n := &Notification{
 		ID:            uuid.New(),
 		Recipient:     "+905551234567",
-		Channel:       ChannelSMS,
+		Channel:       NotificationChannelSMS,
 		Content:       "Hello",
-		Priority:      PriorityHigh,
-		Status:        StatusSent,
+		Priority:      NotificationPriorityHigh,
+		Status:        NotificationStatusSent,
 		BatchID:       &batchID,
 		TemplateID:    &templateID,
 		ProviderMsgID: &providerID,
@@ -48,14 +48,14 @@ func TestToResponse_MapsAllFields(t *testing.T) {
 		CreatedAt:     now,
 	}
 
-	resp := ToResponse(n)
+	resp := ToNotificationResponse(n)
 
 	assert.Equal(t, n.ID, resp.ID)
 	assert.Equal(t, n.Recipient, resp.Recipient)
-	assert.Equal(t, string(ChannelSMS), resp.Channel)
+	assert.Equal(t, string(NotificationChannelSMS), resp.Channel)
 	assert.Equal(t, n.Content, resp.Content)
-	assert.Equal(t, string(PriorityHigh), resp.Priority)
-	assert.Equal(t, string(StatusSent), resp.Status)
+	assert.Equal(t, string(NotificationPriorityHigh), resp.Priority)
+	assert.Equal(t, string(NotificationStatusSent), resp.Status)
 	assert.Equal(t, &batchID, resp.BatchID)
 	assert.Equal(t, &templateID, resp.TemplateID)
 	assert.Equal(t, &providerID, resp.ProviderMsgID)
@@ -68,10 +68,10 @@ func TestToResponse_MapsAllFields(t *testing.T) {
 }
 
 func TestToResponseList(t *testing.T) {
-	n1 := &Notification{ID: uuid.New(), Recipient: "a", Channel: ChannelSMS, Status: StatusPending}
-	n2 := &Notification{ID: uuid.New(), Recipient: "b", Channel: ChannelEmail, Status: StatusSent}
+	n1 := &Notification{ID: uuid.New(), Recipient: "a", Channel: NotificationChannelSMS, Status: NotificationStatusPending}
+	n2 := &Notification{ID: uuid.New(), Recipient: "b", Channel: NotificationChannelEmail, Status: NotificationStatusSent}
 
-	responses := ToResponseList([]*Notification{n1, n2})
+	responses := ToNotificationResponseList([]*Notification{n1, n2})
 
 	assert.Len(t, responses, 2)
 	assert.Equal(t, n1.ID, responses[0].ID)
@@ -79,7 +79,7 @@ func TestToResponseList(t *testing.T) {
 }
 
 func TestToResponseList_Empty(t *testing.T) {
-	responses := ToResponseList([]*Notification{})
+	responses := ToNotificationResponseList([]*Notification{})
 	assert.Empty(t, responses)
 	assert.NotNil(t, responses)
 }
