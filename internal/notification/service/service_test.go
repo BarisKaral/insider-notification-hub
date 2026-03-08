@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/baris/notification-hub/internal/notification/domain"
-	"github.com/baris/notification-hub/internal/notificationtemplate"
+	ntDomain "github.com/baris/notification-hub/internal/notificationtemplate/domain"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -96,36 +96,36 @@ type mockTemplateService struct {
 	mock.Mock
 }
 
-func (m *mockTemplateService) Create(ctx context.Context, req notificationtemplate.NotificationTemplateCreateRequest) (*notificationtemplate.NotificationTemplate, error) {
+func (m *mockTemplateService) Create(ctx context.Context, req ntDomain.NotificationTemplateCreateRequest) (*ntDomain.NotificationTemplate, error) {
 	args := m.Called(ctx, req)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
-	return args.Get(0).(*notificationtemplate.NotificationTemplate), args.Error(1)
+	return args.Get(0).(*ntDomain.NotificationTemplate), args.Error(1)
 }
 
-func (m *mockTemplateService) GetByID(ctx context.Context, id uuid.UUID) (*notificationtemplate.NotificationTemplate, error) {
+func (m *mockTemplateService) GetByID(ctx context.Context, id uuid.UUID) (*ntDomain.NotificationTemplate, error) {
 	args := m.Called(ctx, id)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
-	return args.Get(0).(*notificationtemplate.NotificationTemplate), args.Error(1)
+	return args.Get(0).(*ntDomain.NotificationTemplate), args.Error(1)
 }
 
-func (m *mockTemplateService) List(ctx context.Context, limit, offset int) ([]*notificationtemplate.NotificationTemplate, int64, error) {
+func (m *mockTemplateService) List(ctx context.Context, limit, offset int) ([]*ntDomain.NotificationTemplate, int64, error) {
 	args := m.Called(ctx, limit, offset)
 	if args.Get(0) == nil {
 		return nil, args.Get(1).(int64), args.Error(2)
 	}
-	return args.Get(0).([]*notificationtemplate.NotificationTemplate), args.Get(1).(int64), args.Error(2)
+	return args.Get(0).([]*ntDomain.NotificationTemplate), args.Get(1).(int64), args.Error(2)
 }
 
-func (m *mockTemplateService) Update(ctx context.Context, id uuid.UUID, req notificationtemplate.NotificationTemplateUpdateRequest) (*notificationtemplate.NotificationTemplate, error) {
+func (m *mockTemplateService) Update(ctx context.Context, id uuid.UUID, req ntDomain.NotificationTemplateUpdateRequest) (*ntDomain.NotificationTemplate, error) {
 	args := m.Called(ctx, id, req)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
-	return args.Get(0).(*notificationtemplate.NotificationTemplate), args.Error(1)
+	return args.Get(0).(*ntDomain.NotificationTemplate), args.Error(1)
 }
 
 func (m *mockTemplateService) Delete(ctx context.Context, id uuid.UUID) error {

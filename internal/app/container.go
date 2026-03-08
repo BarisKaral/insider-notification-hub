@@ -15,7 +15,9 @@ import (
 	"github.com/baris/notification-hub/internal/notification/repository"
 	"github.com/baris/notification-hub/internal/notification/service"
 	"github.com/baris/notification-hub/internal/notification/ws"
-	"github.com/baris/notification-hub/internal/notificationtemplate"
+	ntController "github.com/baris/notification-hub/internal/notificationtemplate/controller"
+	ntRepository "github.com/baris/notification-hub/internal/notificationtemplate/repository"
+	ntService "github.com/baris/notification-hub/internal/notificationtemplate/service"
 	"github.com/baris/notification-hub/internal/provider"
 	"github.com/baris/notification-hub/pkg/health"
 	"github.com/baris/notification-hub/pkg/logger"
@@ -38,9 +40,9 @@ type Container struct {
 	NotificationMetrics    *metrics.NotificationMetrics
 
 	// Template domain
-	TemplateRepo    notificationtemplate.NotificationTemplateRepository
-	TemplateService notificationtemplate.NotificationTemplateService
-	TemplateController notificationtemplate.NotificationTemplateController
+	TemplateRepo       ntRepository.NotificationTemplateRepository
+	TemplateService    ntService.NotificationTemplateService
+	TemplateController ntController.NotificationTemplateController
 
 	// Infrastructure
 	ProviderClient provider.ProviderClient
@@ -102,7 +104,7 @@ func NewContainer(cfg *config.Config) (*Container, error) {
 
 	// 6. Repositories
 	c.NotificationRepo = repository.NewNotificationRepository(db)
-	c.TemplateRepo = notificationtemplate.NewNotificationTemplateRepository(db)
+	c.TemplateRepo = ntRepository.NewNotificationTemplateRepository(db)
 
 	// 7. Producer (needs AMQP channel)
 	producerCh, err := rmqConn.Channel()
@@ -112,7 +114,7 @@ func NewContainer(cfg *config.Config) (*Container, error) {
 	c.NotificationProducer = messaging.NewNotificationProducer(producerCh)
 
 	// 8. Services
-	c.TemplateService = notificationtemplate.NewNotificationTemplateService(c.TemplateRepo)
+	c.TemplateService = ntService.NewNotificationTemplateService(c.TemplateRepo)
 	c.NotificationService = service.NewNotificationService(c.NotificationRepo, c.TemplateService, c.NotificationProducer)
 
 	// 9. WebSocket Hub
@@ -143,7 +145,7 @@ func NewContainer(cfg *config.Config) (*Container, error) {
 
 	// 12. Controllers
 	c.NotificationController = controller.NewNotificationController(c.NotificationService, c.NotificationProducer)
-	c.TemplateController = notificationtemplate.NewNotificationTemplateController(c.TemplateService)
+	c.TemplateController = ntController.NewNotificationTemplateController(c.TemplateService)
 
 	// 13. Health check
 	c.HealthService = health.NewHealthService(db, rmqConn)

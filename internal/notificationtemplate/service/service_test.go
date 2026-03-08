@@ -1,4 +1,4 @@
-package notificationtemplate
+package service
 
 import (
 	"context"
@@ -7,6 +7,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+
+	"github.com/baris/notification-hub/internal/notificationtemplate/domain"
 )
 
 // mockRepository implements NotificationTemplateRepository for testing.
@@ -14,25 +16,25 @@ type mockRepository struct {
 	mock.Mock
 }
 
-func (m *mockRepository) Create(ctx context.Context, t *NotificationTemplate) error {
+func (m *mockRepository) Create(ctx context.Context, t *domain.NotificationTemplate) error {
 	args := m.Called(ctx, t)
 	return args.Error(0)
 }
 
-func (m *mockRepository) GetByID(ctx context.Context, id uuid.UUID) (*NotificationTemplate, error) {
+func (m *mockRepository) GetByID(ctx context.Context, id uuid.UUID) (*domain.NotificationTemplate, error) {
 	args := m.Called(ctx, id)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
-	return args.Get(0).(*NotificationTemplate), args.Error(1)
+	return args.Get(0).(*domain.NotificationTemplate), args.Error(1)
 }
 
-func (m *mockRepository) List(ctx context.Context, limit, offset int) ([]*NotificationTemplate, int64, error) {
+func (m *mockRepository) List(ctx context.Context, limit, offset int) ([]*domain.NotificationTemplate, int64, error) {
 	args := m.Called(ctx, limit, offset)
-	return args.Get(0).([]*NotificationTemplate), args.Get(1).(int64), args.Error(2)
+	return args.Get(0).([]*domain.NotificationTemplate), args.Get(1).(int64), args.Error(2)
 }
 
-func (m *mockRepository) Update(ctx context.Context, t *NotificationTemplate) error {
+func (m *mockRepository) Update(ctx context.Context, t *domain.NotificationTemplate) error {
 	args := m.Called(ctx, t)
 	return args.Error(0)
 }
@@ -48,7 +50,7 @@ func TestRender_BasicVariableReplacement(t *testing.T) {
 	ctx := context.Background()
 	templateID := uuid.New()
 
-	repo.On("GetByID", ctx, templateID).Return(&NotificationTemplate{
+	repo.On("GetByID", ctx, templateID).Return(&domain.NotificationTemplate{
 		ID:      templateID,
 		Content: "Merhaba {{name}}, siparis {{orderId}} kargoda.",
 	}, nil)
@@ -69,7 +71,7 @@ func TestRender_MultipleVariables(t *testing.T) {
 	ctx := context.Background()
 	templateID := uuid.New()
 
-	repo.On("GetByID", ctx, templateID).Return(&NotificationTemplate{
+	repo.On("GetByID", ctx, templateID).Return(&domain.NotificationTemplate{
 		ID:      templateID,
 		Content: "{{greeting}} {{name}}, your code is {{code}} and status is {{status}}.",
 	}, nil)
@@ -91,7 +93,7 @@ func TestRender_MissingVariable_PlaceholderStays(t *testing.T) {
 	ctx := context.Background()
 	templateID := uuid.New()
 
-	repo.On("GetByID", ctx, templateID).Return(&NotificationTemplate{
+	repo.On("GetByID", ctx, templateID).Return(&domain.NotificationTemplate{
 		ID:      templateID,
 		Content: "Hello {{name}}, your order {{orderId}} is ready.",
 	}, nil)
@@ -110,7 +112,7 @@ func TestRender_EmptyVariables(t *testing.T) {
 	ctx := context.Background()
 	templateID := uuid.New()
 
-	repo.On("GetByID", ctx, templateID).Return(&NotificationTemplate{
+	repo.On("GetByID", ctx, templateID).Return(&domain.NotificationTemplate{
 		ID:      templateID,
 		Content: "Hello {{name}}!",
 	}, nil)
@@ -127,7 +129,7 @@ func TestRender_NilVariables(t *testing.T) {
 	ctx := context.Background()
 	templateID := uuid.New()
 
-	repo.On("GetByID", ctx, templateID).Return(&NotificationTemplate{
+	repo.On("GetByID", ctx, templateID).Return(&domain.NotificationTemplate{
 		ID:      templateID,
 		Content: "Hello {{name}}!",
 	}, nil)
@@ -144,12 +146,12 @@ func TestRender_TemplateNotFound(t *testing.T) {
 	ctx := context.Background()
 	templateID := uuid.New()
 
-	repo.On("GetByID", ctx, templateID).Return(nil, ErrNotificationTemplateNotFound)
+	repo.On("GetByID", ctx, templateID).Return(nil, domain.ErrNotificationTemplateNotFound)
 
 	result, err := svc.Render(ctx, templateID, map[string]string{"name": "Baris"})
 
 	assert.Error(t, err)
-	assert.Equal(t, ErrNotificationTemplateNotFound, err)
+	assert.Equal(t, domain.ErrNotificationTemplateNotFound, err)
 	assert.Empty(t, result)
 }
 
@@ -159,7 +161,7 @@ func TestRender_NoPlaceholders(t *testing.T) {
 	ctx := context.Background()
 	templateID := uuid.New()
 
-	repo.On("GetByID", ctx, templateID).Return(&NotificationTemplate{
+	repo.On("GetByID", ctx, templateID).Return(&domain.NotificationTemplate{
 		ID:      templateID,
 		Content: "This is a static message with no variables.",
 	}, nil)
@@ -176,7 +178,7 @@ func TestRender_RepeatedPlaceholder(t *testing.T) {
 	ctx := context.Background()
 	templateID := uuid.New()
 
-	repo.On("GetByID", ctx, templateID).Return(&NotificationTemplate{
+	repo.On("GetByID", ctx, templateID).Return(&domain.NotificationTemplate{
 		ID:      templateID,
 		Content: "{{name}} says hello. Goodbye, {{name}}!",
 	}, nil)
@@ -192,13 +194,13 @@ func TestCreate_Success(t *testing.T) {
 	svc := NewNotificationTemplateService(repo)
 	ctx := context.Background()
 
-	req := NotificationTemplateCreateRequest{
+	req := domain.NotificationTemplateCreateRequest{
 		Name:    "order_shipped",
 		Channel: "sms",
 		Content: "Your order {{orderId}} has been shipped.",
 	}
 
-	repo.On("Create", ctx, mock.AnythingOfType("*notificationtemplate.NotificationTemplate")).Return(nil)
+	repo.On("Create", ctx, mock.AnythingOfType("*domain.NotificationTemplate")).Return(nil)
 
 	tmpl, err := svc.Create(ctx, req)
 
@@ -215,7 +217,7 @@ func TestUpdate_Success(t *testing.T) {
 	ctx := context.Background()
 	templateID := uuid.New()
 
-	existing := &NotificationTemplate{
+	existing := &domain.NotificationTemplate{
 		ID:      templateID,
 		Name:    "old_name",
 		Channel: "sms",
@@ -228,7 +230,7 @@ func TestUpdate_Success(t *testing.T) {
 	repo.On("GetByID", ctx, templateID).Return(existing, nil)
 	repo.On("Update", ctx, existing).Return(nil)
 
-	tmpl, err := svc.Update(ctx, templateID, NotificationTemplateUpdateRequest{
+	tmpl, err := svc.Update(ctx, templateID, domain.NotificationTemplateUpdateRequest{
 		Name:    &newName,
 		Content: &newContent,
 	})
@@ -246,44 +248,44 @@ func TestUpdate_NotFound(t *testing.T) {
 	ctx := context.Background()
 	templateID := uuid.New()
 
-	repo.On("GetByID", ctx, templateID).Return(nil, ErrNotificationTemplateNotFound)
+	repo.On("GetByID", ctx, templateID).Return(nil, domain.ErrNotificationTemplateNotFound)
 
 	newName := "new_name"
-	tmpl, err := svc.Update(ctx, templateID, NotificationTemplateUpdateRequest{Name: &newName})
+	tmpl, err := svc.Update(ctx, templateID, domain.NotificationTemplateUpdateRequest{Name: &newName})
 
 	assert.Nil(t, tmpl)
-	assert.Equal(t, ErrNotificationTemplateNotFound, err)
+	assert.Equal(t, domain.ErrNotificationTemplateNotFound, err)
 }
 
 func TestDTO_CreateRequest_Validate(t *testing.T) {
 	tests := []struct {
 		name    string
-		req     NotificationTemplateCreateRequest
+		req     domain.NotificationTemplateCreateRequest
 		wantErr bool
 	}{
 		{
 			name:    "valid request",
-			req:     NotificationTemplateCreateRequest{Name: "test", Channel: "sms", Content: "hello"},
+			req:     domain.NotificationTemplateCreateRequest{Name: "test", Channel: "sms", Content: "hello"},
 			wantErr: false,
 		},
 		{
 			name:    "missing name",
-			req:     NotificationTemplateCreateRequest{Channel: "sms", Content: "hello"},
+			req:     domain.NotificationTemplateCreateRequest{Channel: "sms", Content: "hello"},
 			wantErr: true,
 		},
 		{
 			name:    "missing channel",
-			req:     NotificationTemplateCreateRequest{Name: "test", Content: "hello"},
+			req:     domain.NotificationTemplateCreateRequest{Name: "test", Content: "hello"},
 			wantErr: true,
 		},
 		{
 			name:    "invalid channel",
-			req:     NotificationTemplateCreateRequest{Name: "test", Channel: "fax", Content: "hello"},
+			req:     domain.NotificationTemplateCreateRequest{Name: "test", Channel: "fax", Content: "hello"},
 			wantErr: true,
 		},
 		{
 			name:    "missing content",
-			req:     NotificationTemplateCreateRequest{Name: "test", Channel: "sms"},
+			req:     domain.NotificationTemplateCreateRequest{Name: "test", Channel: "sms"},
 			wantErr: true,
 		},
 	}
@@ -306,22 +308,22 @@ func TestDTO_UpdateRequest_Validate(t *testing.T) {
 
 	tests := []struct {
 		name    string
-		req     NotificationTemplateUpdateRequest
+		req     domain.NotificationTemplateUpdateRequest
 		wantErr bool
 	}{
 		{
 			name:    "valid with name only",
-			req:     NotificationTemplateUpdateRequest{Name: &name},
+			req:     domain.NotificationTemplateUpdateRequest{Name: &name},
 			wantErr: false,
 		},
 		{
 			name:    "no fields provided",
-			req:     NotificationTemplateUpdateRequest{},
+			req:     domain.NotificationTemplateUpdateRequest{},
 			wantErr: true,
 		},
 		{
 			name:    "invalid channel",
-			req:     NotificationTemplateUpdateRequest{Channel: &invalidCh},
+			req:     domain.NotificationTemplateUpdateRequest{Channel: &invalidCh},
 			wantErr: true,
 		},
 	}
@@ -340,14 +342,14 @@ func TestDTO_UpdateRequest_Validate(t *testing.T) {
 
 func TestToResponse_MapsAllFields(t *testing.T) {
 	id := uuid.New()
-	tmpl := &NotificationTemplate{
+	tmpl := &domain.NotificationTemplate{
 		ID:      id,
 		Name:    "test",
 		Channel: "sms",
 		Content: "hello",
 	}
 
-	resp := ToNotificationTemplateResponse(tmpl)
+	resp := domain.ToNotificationTemplateResponse(tmpl)
 
 	assert.Equal(t, id, resp.ID)
 	assert.Equal(t, "test", resp.Name)
@@ -356,12 +358,12 @@ func TestToResponse_MapsAllFields(t *testing.T) {
 }
 
 func TestToResponseList_Maps(t *testing.T) {
-	templates := []*NotificationTemplate{
+	templates := []*domain.NotificationTemplate{
 		{ID: uuid.New(), Name: "a"},
 		{ID: uuid.New(), Name: "b"},
 	}
 
-	responses := ToNotificationTemplateResponseList(templates)
+	responses := domain.ToNotificationTemplateResponseList(templates)
 
 	assert.Len(t, responses, 2)
 	assert.Equal(t, "a", responses[0].Name)

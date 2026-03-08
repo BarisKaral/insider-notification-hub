@@ -1,4 +1,4 @@
-package notificationtemplate
+package domain
 
 import (
 	"net/http"

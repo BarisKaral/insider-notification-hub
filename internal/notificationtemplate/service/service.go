@@ -1,4 +1,4 @@
-package notificationtemplate
+package service
 
 import (
 	"context"
@@ -6,29 +6,32 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+
+	"github.com/baris/notification-hub/internal/notificationtemplate/domain"
+	"github.com/baris/notification-hub/internal/notificationtemplate/repository"
 )
 
 type NotificationTemplateService interface {
-	Create(ctx context.Context, req NotificationTemplateCreateRequest) (*NotificationTemplate, error)
-	GetByID(ctx context.Context, id uuid.UUID) (*NotificationTemplate, error)
-	List(ctx context.Context, limit, offset int) ([]*NotificationTemplate, int64, error)
-	Update(ctx context.Context, id uuid.UUID, req NotificationTemplateUpdateRequest) (*NotificationTemplate, error)
+	Create(ctx context.Context, req domain.NotificationTemplateCreateRequest) (*domain.NotificationTemplate, error)
+	GetByID(ctx context.Context, id uuid.UUID) (*domain.NotificationTemplate, error)
+	List(ctx context.Context, limit, offset int) ([]*domain.NotificationTemplate, int64, error)
+	Update(ctx context.Context, id uuid.UUID, req domain.NotificationTemplateUpdateRequest) (*domain.NotificationTemplate, error)
 	Delete(ctx context.Context, id uuid.UUID) error
 	Render(ctx context.Context, templateID uuid.UUID, variables map[string]string) (string, error)
 }
 
 type service struct {
-	repo NotificationTemplateRepository
+	repo repository.NotificationTemplateRepository
 }
 
 var _ NotificationTemplateService = (*service)(nil)
 
-func NewNotificationTemplateService(repo NotificationTemplateRepository) NotificationTemplateService {
+func NewNotificationTemplateService(repo repository.NotificationTemplateRepository) *service {
 	return &service{repo: repo}
 }
 
-func (s *service) Create(ctx context.Context, req NotificationTemplateCreateRequest) (*NotificationTemplate, error) {
-	t := &NotificationTemplate{
+func (s *service) Create(ctx context.Context, req domain.NotificationTemplateCreateRequest) (*domain.NotificationTemplate, error) {
+	t := &domain.NotificationTemplate{
 		Name:    req.Name,
 		Channel: req.Channel,
 		Content: req.Content,
@@ -41,15 +44,15 @@ func (s *service) Create(ctx context.Context, req NotificationTemplateCreateRequ
 	return t, nil
 }
 
-func (s *service) GetByID(ctx context.Context, id uuid.UUID) (*NotificationTemplate, error) {
+func (s *service) GetByID(ctx context.Context, id uuid.UUID) (*domain.NotificationTemplate, error) {
 	return s.repo.GetByID(ctx, id)
 }
 
-func (s *service) List(ctx context.Context, limit, offset int) ([]*NotificationTemplate, int64, error) {
+func (s *service) List(ctx context.Context, limit, offset int) ([]*domain.NotificationTemplate, int64, error) {
 	return s.repo.List(ctx, limit, offset)
 }
 
-func (s *service) Update(ctx context.Context, id uuid.UUID, req NotificationTemplateUpdateRequest) (*NotificationTemplate, error) {
+func (s *service) Update(ctx context.Context, id uuid.UUID, req domain.NotificationTemplateUpdateRequest) (*domain.NotificationTemplate, error) {
 	t, err := s.repo.GetByID(ctx, id)
 	if err != nil {
 		return nil, err
