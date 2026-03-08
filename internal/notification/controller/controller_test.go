@@ -104,16 +104,6 @@ func (m *mockNotificationService) MarkAsRetrying(ctx context.Context, id uuid.UU
 	return args.Error(0)
 }
 
-func (m *mockNotificationService) RecoverStuckNotifications(ctx context.Context) error {
-	args := m.Called(ctx)
-	return args.Error(0)
-}
-
-func (m *mockNotificationService) PublishDueScheduled(ctx context.Context) error {
-	args := m.Called(ctx)
-	return args.Error(0)
-}
-
 // --- Processing Service Mock ---
 
 type mockNotificationProcessingService struct {

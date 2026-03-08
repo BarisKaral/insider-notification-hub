@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/baris/notification-hub/internal/notification/domain"
 	"github.com/baris/notification-hub/internal/notification/provider"
@@ -94,16 +95,6 @@ func (m *mockNotificationServiceForProcessing) MarkAsRetrying(ctx context.Contex
 	return args.Error(0)
 }
 
-func (m *mockNotificationServiceForProcessing) RecoverStuckNotifications(ctx context.Context) error {
-	args := m.Called(ctx)
-	return args.Error(0)
-}
-
-func (m *mockNotificationServiceForProcessing) PublishDueScheduled(ctx context.Context) error {
-	args := m.Called(ctx)
-	return args.Error(0)
-}
-
 type mockProvider struct {
 	mock.Mock
 }
@@ -116,17 +107,36 @@ func (m *mockProvider) Send(ctx context.Context, req *provider.ProviderRequest) 
 	return args.Get(0).(*provider.ProviderResponse), args.Error(1)
 }
 
-func newTestProcessingService(svc *mockNotificationServiceForProcessing, prod *mockNotificationProducer, providers map[domain.NotificationChannel]provider.NotificationProvider) NotificationProcessingService {
-	return NewNotificationProcessingService(svc, prod, providers)
+type mockNotificationProducerForProcessing struct {
+	mock.Mock
+}
+
+func (m *mockNotificationProducerForProcessing) Publish(ctx context.Context, n *domain.Notification) error {
+	args := m.Called(ctx, n)
+	return args.Error(0)
+}
+
+func (m *mockNotificationProducerForProcessing) PublishBatch(ctx context.Context, notifications []*domain.Notification) error {
+	args := m.Called(ctx, notifications)
+	return args.Error(0)
+}
+
+func (m *mockNotificationProducerForProcessing) PublishToRetry(ctx context.Context, n *domain.Notification, retryCount int32) error {
+	args := m.Called(ctx, n, retryCount)
+	return args.Error(0)
+}
+
+func newTestProcessingService(svc *mockNotificationServiceForProcessing, prod *mockNotificationProducerForProcessing, providers map[domain.NotificationChannel]provider.NotificationProvider, repo *mockNotificationRepository) NotificationProcessingService {
+	return NewNotificationProcessingService(svc, prod, providers, repo)
 }
 
 // --- Create Tests ---
 
 func TestProcessingService_Create_NonScheduled_PublishesAndMarksQueued(t *testing.T) {
 	svc := new(mockNotificationServiceForProcessing)
-	prod := new(mockNotificationProducer)
+	prod := new(mockNotificationProducerForProcessing)
 	providers := map[domain.NotificationChannel]provider.NotificationProvider{}
-	ps := newTestProcessingService(svc, prod, providers)
+	ps := newTestProcessingService(svc, prod, providers, new(mockNotificationRepository))
 
 	content := "Hello World"
 	req := domain.NotificationCreateRequest{
@@ -158,9 +168,9 @@ func TestProcessingService_Create_NonScheduled_PublishesAndMarksQueued(t *testin
 
 func TestProcessingService_Create_Scheduled_NoPublish(t *testing.T) {
 	svc := new(mockNotificationServiceForProcessing)
-	prod := new(mockNotificationProducer)
+	prod := new(mockNotificationProducerForProcessing)
 	providers := map[domain.NotificationChannel]provider.NotificationProvider{}
-	ps := newTestProcessingService(svc, prod, providers)
+	ps := newTestProcessingService(svc, prod, providers, new(mockNotificationRepository))
 
 	content := "Scheduled"
 	req := domain.NotificationCreateRequest{
@@ -187,9 +197,9 @@ func TestProcessingService_Create_Scheduled_NoPublish(t *testing.T) {
 
 func TestProcessingService_Create_PublishFails_ReturnsNotificationAsPending(t *testing.T) {
 	svc := new(mockNotificationServiceForProcessing)
-	prod := new(mockNotificationProducer)
+	prod := new(mockNotificationProducerForProcessing)
 	providers := map[domain.NotificationChannel]provider.NotificationProvider{}
-	ps := newTestProcessingService(svc, prod, providers)
+	ps := newTestProcessingService(svc, prod, providers, new(mockNotificationRepository))
 
 	content := "Hello"
 	req := domain.NotificationCreateRequest{
@@ -220,9 +230,9 @@ func TestProcessingService_Create_PublishFails_ReturnsNotificationAsPending(t *t
 
 func TestProcessingService_CreateBatch_PublishesNonScheduled(t *testing.T) {
 	svc := new(mockNotificationServiceForProcessing)
-	prod := new(mockNotificationProducer)
+	prod := new(mockNotificationProducerForProcessing)
 	providers := map[domain.NotificationChannel]provider.NotificationProvider{}
-	ps := newTestProcessingService(svc, prod, providers)
+	ps := newTestProcessingService(svc, prod, providers, new(mockNotificationRepository))
 
 	content1 := "Hello 1"
 	content2 := "Hello 2"
@@ -260,9 +270,9 @@ func TestProcessingService_CreateBatch_PublishesNonScheduled(t *testing.T) {
 
 func TestProcessingService_CreateBatch_MixedScheduledAndPending(t *testing.T) {
 	svc := new(mockNotificationServiceForProcessing)
-	prod := new(mockNotificationProducer)
+	prod := new(mockNotificationProducerForProcessing)
 	providers := map[domain.NotificationChannel]provider.NotificationProvider{}
-	ps := newTestProcessingService(svc, prod, providers)
+	ps := newTestProcessingService(svc, prod, providers, new(mockNotificationRepository))
 
 	content := "Hello"
 	req := domain.NotificationBatchCreateRequest{
@@ -300,12 +310,12 @@ func TestProcessingService_CreateBatch_MixedScheduledAndPending(t *testing.T) {
 
 func TestProcessingService_ProcessAndSend_Success(t *testing.T) {
 	svc := new(mockNotificationServiceForProcessing)
-	prod := new(mockNotificationProducer)
+	prod := new(mockNotificationProducerForProcessing)
 	smsProv := new(mockProvider)
 	providers := map[domain.NotificationChannel]provider.NotificationProvider{
 		domain.NotificationChannelSMS: smsProv,
 	}
-	ps := newTestProcessingService(svc, prod, providers)
+	ps := newTestProcessingService(svc, prod, providers, new(mockNotificationRepository))
 
 	id := uuid.New()
 	n := &domain.Notification{
@@ -333,9 +343,9 @@ func TestProcessingService_ProcessAndSend_Success(t *testing.T) {
 
 func TestProcessingService_ProcessAndSend_SkipsCancelled(t *testing.T) {
 	svc := new(mockNotificationServiceForProcessing)
-	prod := new(mockNotificationProducer)
+	prod := new(mockNotificationProducerForProcessing)
 	providers := map[domain.NotificationChannel]provider.NotificationProvider{}
-	ps := newTestProcessingService(svc, prod, providers)
+	ps := newTestProcessingService(svc, prod, providers, new(mockNotificationRepository))
 
 	id := uuid.New()
 	n := &domain.Notification{
@@ -355,9 +365,9 @@ func TestProcessingService_ProcessAndSend_SkipsCancelled(t *testing.T) {
 
 func TestProcessingService_ProcessAndSend_SkipsAlreadySent(t *testing.T) {
 	svc := new(mockNotificationServiceForProcessing)
-	prod := new(mockNotificationProducer)
+	prod := new(mockNotificationProducerForProcessing)
 	providers := map[domain.NotificationChannel]provider.NotificationProvider{}
-	ps := newTestProcessingService(svc, prod, providers)
+	ps := newTestProcessingService(svc, prod, providers, new(mockNotificationRepository))
 
 	id := uuid.New()
 	n := &domain.Notification{
@@ -377,12 +387,12 @@ func TestProcessingService_ProcessAndSend_SkipsAlreadySent(t *testing.T) {
 
 func TestProcessingService_ProcessAndSend_ProviderError(t *testing.T) {
 	svc := new(mockNotificationServiceForProcessing)
-	prod := new(mockNotificationProducer)
+	prod := new(mockNotificationProducerForProcessing)
 	smsProv := new(mockProvider)
 	providers := map[domain.NotificationChannel]provider.NotificationProvider{
 		domain.NotificationChannelSMS: smsProv,
 	}
-	ps := newTestProcessingService(svc, prod, providers)
+	ps := newTestProcessingService(svc, prod, providers, new(mockNotificationRepository))
 
 	id := uuid.New()
 	n := &domain.Notification{
@@ -405,9 +415,9 @@ func TestProcessingService_ProcessAndSend_ProviderError(t *testing.T) {
 
 func TestProcessingService_ProcessAndSend_NoProviderForChannel(t *testing.T) {
 	svc := new(mockNotificationServiceForProcessing)
-	prod := new(mockNotificationProducer)
+	prod := new(mockNotificationProducerForProcessing)
 	providers := map[domain.NotificationChannel]provider.NotificationProvider{}
-	ps := newTestProcessingService(svc, prod, providers)
+	ps := newTestProcessingService(svc, prod, providers, new(mockNotificationRepository))
 
 	id := uuid.New()
 	n := &domain.Notification{
@@ -429,9 +439,9 @@ func TestProcessingService_ProcessAndSend_NoProviderForChannel(t *testing.T) {
 
 func TestProcessingService_HandleDeliveryFailure_Retry(t *testing.T) {
 	svc := new(mockNotificationServiceForProcessing)
-	prod := new(mockNotificationProducer)
+	prod := new(mockNotificationProducerForProcessing)
 	providers := map[domain.NotificationChannel]provider.NotificationProvider{}
-	ps := newTestProcessingService(svc, prod, providers)
+	ps := newTestProcessingService(svc, prod, providers, new(mockNotificationRepository))
 
 	id := uuid.New()
 	n := &domain.Notification{
@@ -454,9 +464,9 @@ func TestProcessingService_HandleDeliveryFailure_Retry(t *testing.T) {
 
 func TestProcessingService_HandleDeliveryFailure_PermanentFailure(t *testing.T) {
 	svc := new(mockNotificationServiceForProcessing)
-	prod := new(mockNotificationProducer)
+	prod := new(mockNotificationProducerForProcessing)
 	providers := map[domain.NotificationChannel]provider.NotificationProvider{}
-	ps := newTestProcessingService(svc, prod, providers)
+	ps := newTestProcessingService(svc, prod, providers, new(mockNotificationRepository))
 
 	id := uuid.New()
 	n := &domain.Notification{
@@ -479,28 +489,57 @@ func TestProcessingService_HandleDeliveryFailure_PermanentFailure(t *testing.T) 
 
 func TestProcessingService_RecoverStuckNotifications(t *testing.T) {
 	svc := new(mockNotificationServiceForProcessing)
-	prod := new(mockNotificationProducer)
+	prod := new(mockNotificationProducerForProcessing)
+	repo := new(mockNotificationRepository)
 	providers := map[domain.NotificationChannel]provider.NotificationProvider{}
-	ps := newTestProcessingService(svc, prod, providers)
+	ps := newTestProcessingService(svc, prod, providers, repo)
 
-	svc.On("RecoverStuckNotifications", mock.Anything).Return(nil)
+	id1 := uuid.New()
+	id2 := uuid.New()
+	stuckNotifications := []*domain.Notification{
+		{ID: id1, Status: domain.NotificationStatusPending, Channel: domain.NotificationChannelSMS},
+		{ID: id2, Status: domain.NotificationStatusPending, Channel: domain.NotificationChannelEmail},
+	}
+
+	repo.On("GetRecoverableNotifications", mock.Anything, 30*time.Second).Return(stuckNotifications, nil)
+	prod.On("Publish", mock.Anything, stuckNotifications[0]).Return(nil)
+	prod.On("Publish", mock.Anything, stuckNotifications[1]).Return(nil)
+	svc.On("MarkAsQueued", mock.Anything, id1).Return(nil)
+	svc.On("MarkAsQueued", mock.Anything, id2).Return(nil)
 
 	err := ps.RecoverStuckNotifications(context.Background())
 
 	require.NoError(t, err)
+	repo.AssertExpectations(t)
+	prod.AssertExpectations(t)
 	svc.AssertExpectations(t)
 }
 
 func TestProcessingService_PublishDueScheduled(t *testing.T) {
 	svc := new(mockNotificationServiceForProcessing)
-	prod := new(mockNotificationProducer)
+	prod := new(mockNotificationProducerForProcessing)
+	repo := new(mockNotificationRepository)
 	providers := map[domain.NotificationChannel]provider.NotificationProvider{}
-	ps := newTestProcessingService(svc, prod, providers)
+	ps := newTestProcessingService(svc, prod, providers, repo)
 
-	svc.On("PublishDueScheduled", mock.Anything).Return(nil)
+	id1 := uuid.New()
+	id2 := uuid.New()
+	pastTime := time.Now().UTC().Add(-1 * time.Hour)
+	dueNotifications := []*domain.Notification{
+		{ID: id1, Status: domain.NotificationStatusScheduled, Channel: domain.NotificationChannelSMS, ScheduledAt: &pastTime},
+		{ID: id2, Status: domain.NotificationStatusScheduled, Channel: domain.NotificationChannelEmail, ScheduledAt: &pastTime},
+	}
+
+	repo.On("GetDueScheduledNotifications", mock.Anything).Return(dueNotifications, nil)
+	prod.On("Publish", mock.Anything, dueNotifications[0]).Return(nil)
+	prod.On("Publish", mock.Anything, dueNotifications[1]).Return(nil)
+	svc.On("MarkAsQueued", mock.Anything, id1).Return(nil)
+	svc.On("MarkAsQueued", mock.Anything, id2).Return(nil)
 
 	err := ps.PublishDueScheduled(context.Background())
 
 	require.NoError(t, err)
+	repo.AssertExpectations(t)
+	prod.AssertExpectations(t)
 	svc.AssertExpectations(t)
 }

@@ -8,7 +8,6 @@ import (
 	"github.com/baris/notification-hub/internal/notification/domain"
 	"github.com/baris/notification-hub/internal/notification/repository"
 	ntService "github.com/baris/notification-hub/internal/notificationtemplate/service"
-	"github.com/baris/notification-hub/pkg/logger"
 	"github.com/google/uuid"
 )
 
@@ -25,8 +24,6 @@ type NotificationService interface {
 	MarkAsFailed(ctx context.Context, id uuid.UUID, reason string, retryCount int) error
 	MarkAsQueued(ctx context.Context, id uuid.UUID) error
 	MarkAsRetrying(ctx context.Context, id uuid.UUID) error
-	RecoverStuckNotifications(ctx context.Context) error
-	PublishDueScheduled(ctx context.Context) error
 }
 
 // NotificationProducer publishes notifications to message queues.
@@ -39,17 +36,15 @@ type NotificationProducer interface {
 type notificationService struct {
 	repo            repository.NotificationRepository
 	templateService ntService.NotificationTemplateService
-	producer        NotificationProducer
 }
 
 var _ NotificationService = (*notificationService)(nil)
 
 // NewNotificationService creates a new NotificationService.
-func NewNotificationService(repo repository.NotificationRepository, templateSvc ntService.NotificationTemplateService, producer NotificationProducer) *notificationService {
+func NewNotificationService(repo repository.NotificationRepository, templateSvc ntService.NotificationTemplateService) *notificationService {
 	return &notificationService{
 		repo:            repo,
 		templateService: templateSvc,
-		producer:        producer,
 	}
 }
 
@@ -302,54 +297,3 @@ func (s *notificationService) MarkAsRetrying(ctx context.Context, id uuid.UUID) 
 	return s.repo.Update(ctx, n)
 }
 
-// RecoverStuckNotifications finds pending notifications older than 30s and re-publishes them.
-func (s *notificationService) RecoverStuckNotifications(ctx context.Context) error {
-	notifications, err := s.repo.GetRecoverableNotifications(ctx, 30*time.Second)
-	if err != nil {
-		logger.Error().Err(err).Msg("failed to get recoverable notifications")
-		return nil
-	}
-
-	for _, n := range notifications {
-		if err := s.producer.Publish(ctx, n); err != nil {
-			logger.Error().Err(err).Str("notificationId", n.ID.String()).Msg("failed to publish stuck notification")
-			continue
-		}
-
-		n.Status = domain.NotificationStatusQueued
-		if err := s.repo.Update(ctx, n); err != nil {
-			logger.Error().Err(err).Str("notificationId", n.ID.String()).Msg("failed to update stuck notification status")
-			continue
-		}
-
-		logger.Info().Str("notificationId", n.ID.String()).Msg("recovered stuck notification")
-	}
-
-	return nil
-}
-
-// PublishDueScheduled finds scheduled notifications with scheduled_at <= now and publishes them.
-func (s *notificationService) PublishDueScheduled(ctx context.Context) error {
-	notifications, err := s.repo.GetDueScheduledNotifications(ctx)
-	if err != nil {
-		logger.Error().Err(err).Msg("failed to get due scheduled notifications")
-		return nil
-	}
-
-	for _, n := range notifications {
-		if err := s.producer.Publish(ctx, n); err != nil {
-			logger.Error().Err(err).Str("notificationId", n.ID.String()).Msg("failed to publish scheduled notification")
-			continue
-		}
-
-		n.Status = domain.NotificationStatusQueued
-		if err := s.repo.Update(ctx, n); err != nil {
-			logger.Error().Err(err).Str("notificationId", n.ID.String()).Msg("failed to update scheduled notification status")
-			continue
-		}
-
-		logger.Info().Str("notificationId", n.ID.String()).Msg("published due scheduled notification")
-	}
-
-	return nil
-}

@@ -133,11 +133,12 @@ func NewContainer(cfg *config.Config) (*Container, error) {
 
 	// 8. Services
 	c.TemplateService = ntService.NewNotificationTemplateService(c.TemplateRepo)
-	c.NotificationService = service.NewNotificationService(c.NotificationRepo, c.TemplateService, c.NotificationProducer)
+	c.NotificationService = service.NewNotificationService(c.NotificationRepo, c.TemplateService)
 	c.NotificationProcessingService = service.NewNotificationProcessingService(
 		c.NotificationService,
 		c.NotificationProducer,
 		providers,
+		c.NotificationRepo,
 	)
 
 	// 9. WebSocket Hub
