@@ -7,11 +7,16 @@ import (
 
 	"github.com/bariskaral/insider-notification-hub/internal/notification/domain"
 	"github.com/bariskaral/insider-notification-hub/internal/notification/provider"
+	"github.com/bariskaral/insider-notification-hub/pkg/logger"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
+
+func init() {
+	logger.Init("debug")
+}
 
 // --- Mocks for ProcessingService ---
 
@@ -226,6 +231,128 @@ func TestProcessingService_Create_PublishFails_ReturnsNotificationAsPending(t *t
 	prod.AssertExpectations(t)
 }
 
+func TestProcessingService_Create_ServiceError(t *testing.T) {
+	svc := new(mockNotificationServiceForProcessing)
+	prod := new(mockNotificationProducerForProcessing)
+	providers := map[domain.NotificationChannel]provider.NotificationProvider{}
+	ps := newTestProcessingService(svc, prod, providers, new(mockNotificationRepository))
+
+	content := "Hello"
+	req := domain.NotificationCreateRequest{
+		Recipient: "+1234567890",
+		Channel:   "sms",
+		Content:   &content,
+	}
+
+	svc.On("Create", mock.Anything, req, (*string)(nil)).Return(nil, assert.AnError)
+
+	result, err := ps.Create(context.Background(), req, nil)
+
+	assert.Error(t, err)
+	assert.Nil(t, result)
+	prod.AssertNotCalled(t, "Publish", mock.Anything, mock.Anything)
+	svc.AssertNotCalled(t, "MarkAsQueued", mock.Anything, mock.Anything)
+	svc.AssertExpectations(t)
+}
+
+func TestProcessingService_Create_PublishError(t *testing.T) {
+	svc := new(mockNotificationServiceForProcessing)
+	prod := new(mockNotificationProducerForProcessing)
+	providers := map[domain.NotificationChannel]provider.NotificationProvider{}
+	ps := newTestProcessingService(svc, prod, providers, new(mockNotificationRepository))
+
+	content := "Hello"
+	req := domain.NotificationCreateRequest{
+		Recipient: "+1234567890",
+		Channel:   "sms",
+		Content:   &content,
+	}
+
+	notifID := uuid.New()
+	createdNotif := &domain.Notification{
+		ID:     notifID,
+		Status: domain.NotificationStatusPending,
+	}
+
+	svc.On("Create", mock.Anything, req, (*string)(nil)).Return(createdNotif, nil)
+	prod.On("Publish", mock.Anything, createdNotif).Return(assert.AnError)
+
+	result, err := ps.Create(context.Background(), req, nil)
+
+	require.NoError(t, err)
+	assert.NotNil(t, result)
+	assert.Equal(t, domain.NotificationStatusPending, result.Status)
+	svc.AssertNotCalled(t, "MarkAsQueued", mock.Anything, mock.Anything)
+	svc.AssertExpectations(t)
+	prod.AssertExpectations(t)
+}
+
+func TestProcessingService_Create_MarkAsQueuedError(t *testing.T) {
+	svc := new(mockNotificationServiceForProcessing)
+	prod := new(mockNotificationProducerForProcessing)
+	providers := map[domain.NotificationChannel]provider.NotificationProvider{}
+	ps := newTestProcessingService(svc, prod, providers, new(mockNotificationRepository))
+
+	content := "Hello"
+	req := domain.NotificationCreateRequest{
+		Recipient: "+1234567890",
+		Channel:   "sms",
+		Content:   &content,
+	}
+
+	notifID := uuid.New()
+	createdNotif := &domain.Notification{
+		ID:     notifID,
+		Status: domain.NotificationStatusPending,
+	}
+
+	svc.On("Create", mock.Anything, req, (*string)(nil)).Return(createdNotif, nil)
+	prod.On("Publish", mock.Anything, createdNotif).Return(nil)
+	svc.On("MarkAsQueued", mock.Anything, notifID).Return(assert.AnError)
+
+	result, err := ps.Create(context.Background(), req, nil)
+
+	require.NoError(t, err)
+	assert.NotNil(t, result)
+	// Status remains pending because MarkAsQueued failed
+	assert.Equal(t, domain.NotificationStatusPending, result.Status)
+	svc.AssertExpectations(t)
+	prod.AssertExpectations(t)
+}
+
+func TestProcessingService_Create_Scheduled(t *testing.T) {
+	svc := new(mockNotificationServiceForProcessing)
+	prod := new(mockNotificationProducerForProcessing)
+	providers := map[domain.NotificationChannel]provider.NotificationProvider{}
+	ps := newTestProcessingService(svc, prod, providers, new(mockNotificationRepository))
+
+	content := "Scheduled notification"
+	futureTime := time.Now().UTC().Add(24 * time.Hour)
+	req := domain.NotificationCreateRequest{
+		Recipient:   "+1234567890",
+		Channel:     "sms",
+		Content:     &content,
+		ScheduledAt: &futureTime,
+	}
+
+	createdNotif := &domain.Notification{
+		ID:          uuid.New(),
+		Status:      domain.NotificationStatusScheduled,
+		ScheduledAt: &futureTime,
+	}
+
+	svc.On("Create", mock.Anything, req, (*string)(nil)).Return(createdNotif, nil)
+
+	result, err := ps.Create(context.Background(), req, nil)
+
+	require.NoError(t, err)
+	assert.NotNil(t, result)
+	assert.Equal(t, domain.NotificationStatusScheduled, result.Status)
+	prod.AssertNotCalled(t, "Publish", mock.Anything, mock.Anything)
+	svc.AssertNotCalled(t, "MarkAsQueued", mock.Anything, mock.Anything)
+	svc.AssertExpectations(t)
+}
+
 // --- CreateBatch Tests ---
 
 func TestProcessingService_CreateBatch_PublishesNonScheduled(t *testing.T) {
@@ -301,6 +428,193 @@ func TestProcessingService_CreateBatch_MixedScheduledAndPending(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, domain.NotificationStatusQueued, results[0].Status)
 	assert.Equal(t, domain.NotificationStatusScheduled, results[1].Status)
+	svc.AssertNotCalled(t, "MarkAsQueued", mock.Anything, notifID2)
+	svc.AssertExpectations(t)
+	prod.AssertExpectations(t)
+}
+
+func TestProcessingService_CreateBatch_ServiceError(t *testing.T) {
+	svc := new(mockNotificationServiceForProcessing)
+	prod := new(mockNotificationProducerForProcessing)
+	providers := map[domain.NotificationChannel]provider.NotificationProvider{}
+	ps := newTestProcessingService(svc, prod, providers, new(mockNotificationRepository))
+
+	content := "Hello"
+	req := domain.NotificationBatchCreateRequest{
+		Notifications: []domain.NotificationCreateRequest{
+			{Recipient: "+111", Channel: "sms", Content: &content},
+		},
+	}
+
+	svc.On("CreateBatch", mock.Anything, req).Return(nil, uuid.Nil, assert.AnError)
+
+	results, batchID, err := ps.CreateBatch(context.Background(), req)
+
+	assert.Error(t, err)
+	assert.Nil(t, results)
+	assert.Equal(t, uuid.Nil, batchID)
+	prod.AssertNotCalled(t, "PublishBatch", mock.Anything, mock.Anything)
+	svc.AssertNotCalled(t, "MarkAsQueued", mock.Anything, mock.Anything)
+	svc.AssertExpectations(t)
+}
+
+func TestProcessingService_CreateBatch_PublishBatchError(t *testing.T) {
+	svc := new(mockNotificationServiceForProcessing)
+	prod := new(mockNotificationProducerForProcessing)
+	providers := map[domain.NotificationChannel]provider.NotificationProvider{}
+	ps := newTestProcessingService(svc, prod, providers, new(mockNotificationRepository))
+
+	content := "Hello"
+	req := domain.NotificationBatchCreateRequest{
+		Notifications: []domain.NotificationCreateRequest{
+			{Recipient: "+111", Channel: "sms", Content: &content},
+			{Recipient: "+222", Channel: "sms", Content: &content},
+		},
+	}
+
+	batchID := uuid.New()
+	notifID1 := uuid.New()
+	notifID2 := uuid.New()
+	notifications := []*domain.Notification{
+		{ID: notifID1, Status: domain.NotificationStatusPending, Channel: domain.NotificationChannelSMS, BatchID: &batchID},
+		{ID: notifID2, Status: domain.NotificationStatusPending, Channel: domain.NotificationChannelSMS, BatchID: &batchID},
+	}
+
+	svc.On("CreateBatch", mock.Anything, req).Return(notifications, batchID, nil)
+	prod.On("PublishBatch", mock.Anything, notifications).Return(assert.AnError)
+
+	results, resultBatchID, err := ps.CreateBatch(context.Background(), req)
+
+	require.NoError(t, err)
+	assert.Equal(t, batchID, resultBatchID)
+	assert.Len(t, results, 2)
+	// Notifications keep their original pending status since publish failed
+	for _, n := range results {
+		assert.Equal(t, domain.NotificationStatusPending, n.Status)
+	}
+	svc.AssertNotCalled(t, "MarkAsQueued", mock.Anything, mock.Anything)
+	svc.AssertExpectations(t)
+	prod.AssertExpectations(t)
+}
+
+func TestProcessingService_CreateBatch_MarkAsQueuedError(t *testing.T) {
+	svc := new(mockNotificationServiceForProcessing)
+	prod := new(mockNotificationProducerForProcessing)
+	providers := map[domain.NotificationChannel]provider.NotificationProvider{}
+	ps := newTestProcessingService(svc, prod, providers, new(mockNotificationRepository))
+
+	content := "Hello"
+	req := domain.NotificationBatchCreateRequest{
+		Notifications: []domain.NotificationCreateRequest{
+			{Recipient: "+111", Channel: "sms", Content: &content},
+			{Recipient: "+222", Channel: "sms", Content: &content},
+		},
+	}
+
+	batchID := uuid.New()
+	notifID1 := uuid.New()
+	notifID2 := uuid.New()
+	notifications := []*domain.Notification{
+		{ID: notifID1, Status: domain.NotificationStatusPending, Channel: domain.NotificationChannelSMS, BatchID: &batchID},
+		{ID: notifID2, Status: domain.NotificationStatusPending, Channel: domain.NotificationChannelSMS, BatchID: &batchID},
+	}
+
+	svc.On("CreateBatch", mock.Anything, req).Return(notifications, batchID, nil)
+	prod.On("PublishBatch", mock.Anything, notifications).Return(nil)
+	// First MarkAsQueued fails, second succeeds
+	svc.On("MarkAsQueued", mock.Anything, notifID1).Return(assert.AnError)
+	svc.On("MarkAsQueued", mock.Anything, notifID2).Return(nil)
+
+	results, resultBatchID, err := ps.CreateBatch(context.Background(), req)
+
+	require.NoError(t, err)
+	assert.Equal(t, batchID, resultBatchID)
+	assert.Len(t, results, 2)
+	// First notification stays pending due to MarkAsQueued error
+	assert.Equal(t, domain.NotificationStatusPending, results[0].Status)
+	// Second notification gets queued status
+	assert.Equal(t, domain.NotificationStatusQueued, results[1].Status)
+	svc.AssertExpectations(t)
+	prod.AssertExpectations(t)
+}
+
+func TestProcessingService_CreateBatch_AllScheduled(t *testing.T) {
+	svc := new(mockNotificationServiceForProcessing)
+	prod := new(mockNotificationProducerForProcessing)
+	providers := map[domain.NotificationChannel]provider.NotificationProvider{}
+	ps := newTestProcessingService(svc, prod, providers, new(mockNotificationRepository))
+
+	content := "Scheduled"
+	futureTime := time.Now().UTC().Add(24 * time.Hour)
+	req := domain.NotificationBatchCreateRequest{
+		Notifications: []domain.NotificationCreateRequest{
+			{Recipient: "+111", Channel: "sms", Content: &content, ScheduledAt: &futureTime},
+			{Recipient: "+222", Channel: "sms", Content: &content, ScheduledAt: &futureTime},
+		},
+	}
+
+	batchID := uuid.New()
+	notifications := []*domain.Notification{
+		{ID: uuid.New(), Status: domain.NotificationStatusScheduled, Channel: domain.NotificationChannelSMS, BatchID: &batchID, ScheduledAt: &futureTime},
+		{ID: uuid.New(), Status: domain.NotificationStatusScheduled, Channel: domain.NotificationChannelSMS, BatchID: &batchID, ScheduledAt: &futureTime},
+	}
+
+	svc.On("CreateBatch", mock.Anything, req).Return(notifications, batchID, nil)
+
+	results, resultBatchID, err := ps.CreateBatch(context.Background(), req)
+
+	require.NoError(t, err)
+	assert.Equal(t, batchID, resultBatchID)
+	assert.Len(t, results, 2)
+	for _, n := range results {
+		assert.Equal(t, domain.NotificationStatusScheduled, n.Status)
+	}
+	prod.AssertNotCalled(t, "PublishBatch", mock.Anything, mock.Anything)
+	svc.AssertNotCalled(t, "MarkAsQueued", mock.Anything, mock.Anything)
+	svc.AssertExpectations(t)
+}
+
+func TestProcessingService_CreateBatch_MixedScheduledAndPending_OnlyPublishesPending(t *testing.T) {
+	svc := new(mockNotificationServiceForProcessing)
+	prod := new(mockNotificationProducerForProcessing)
+	providers := map[domain.NotificationChannel]provider.NotificationProvider{}
+	ps := newTestProcessingService(svc, prod, providers, new(mockNotificationRepository))
+
+	content := "Hello"
+	futureTime := time.Now().UTC().Add(24 * time.Hour)
+	req := domain.NotificationBatchCreateRequest{
+		Notifications: []domain.NotificationCreateRequest{
+			{Recipient: "+111", Channel: "sms", Content: &content},
+			{Recipient: "+222", Channel: "sms", Content: &content, ScheduledAt: &futureTime},
+			{Recipient: "+333", Channel: "sms", Content: &content},
+		},
+	}
+
+	batchID := uuid.New()
+	notifID1 := uuid.New()
+	notifID2 := uuid.New()
+	notifID3 := uuid.New()
+	notifications := []*domain.Notification{
+		{ID: notifID1, Status: domain.NotificationStatusPending, Channel: domain.NotificationChannelSMS, BatchID: &batchID},
+		{ID: notifID2, Status: domain.NotificationStatusScheduled, Channel: domain.NotificationChannelSMS, BatchID: &batchID, ScheduledAt: &futureTime},
+		{ID: notifID3, Status: domain.NotificationStatusPending, Channel: domain.NotificationChannelSMS, BatchID: &batchID},
+	}
+
+	svc.On("CreateBatch", mock.Anything, req).Return(notifications, batchID, nil)
+	prod.On("PublishBatch", mock.Anything, mock.MatchedBy(func(ns []*domain.Notification) bool {
+		return len(ns) == 2 && ns[0].ID == notifID1 && ns[1].ID == notifID3
+	})).Return(nil)
+	svc.On("MarkAsQueued", mock.Anything, notifID1).Return(nil)
+	svc.On("MarkAsQueued", mock.Anything, notifID3).Return(nil)
+
+	results, resultBatchID, err := ps.CreateBatch(context.Background(), req)
+
+	require.NoError(t, err)
+	assert.Equal(t, batchID, resultBatchID)
+	assert.Len(t, results, 3)
+	assert.Equal(t, domain.NotificationStatusQueued, results[0].Status)
+	assert.Equal(t, domain.NotificationStatusScheduled, results[1].Status)
+	assert.Equal(t, domain.NotificationStatusQueued, results[2].Status)
 	svc.AssertNotCalled(t, "MarkAsQueued", mock.Anything, notifID2)
 	svc.AssertExpectations(t)
 	prod.AssertExpectations(t)
@@ -435,6 +749,173 @@ func TestProcessingService_ProcessAndSend_NoProviderForChannel(t *testing.T) {
 	svc.AssertExpectations(t)
 }
 
+func TestProcessingService_ProcessAndSend_MarkAsProcessingError(t *testing.T) {
+	svc := new(mockNotificationServiceForProcessing)
+	prod := new(mockNotificationProducerForProcessing)
+	providers := map[domain.NotificationChannel]provider.NotificationProvider{}
+	ps := newTestProcessingService(svc, prod, providers, new(mockNotificationRepository))
+
+	id := uuid.New()
+
+	svc.On("MarkAsProcessing", mock.Anything, id).Return(nil, assert.AnError)
+
+	result, sent, err := ps.ProcessAndSend(context.Background(), id)
+
+	assert.Error(t, err)
+	assert.False(t, sent)
+	assert.Nil(t, result)
+	svc.AssertExpectations(t)
+}
+
+func TestProcessingService_ProcessAndSend_Cancelled(t *testing.T) {
+	svc := new(mockNotificationServiceForProcessing)
+	prod := new(mockNotificationProducerForProcessing)
+	smsProv := new(mockProvider)
+	providers := map[domain.NotificationChannel]provider.NotificationProvider{
+		domain.NotificationChannelSMS: smsProv,
+	}
+	ps := newTestProcessingService(svc, prod, providers, new(mockNotificationRepository))
+
+	id := uuid.New()
+	n := &domain.Notification{
+		ID:      id,
+		Channel: domain.NotificationChannelSMS,
+		Status:  domain.NotificationStatusCancelled,
+	}
+
+	svc.On("MarkAsProcessing", mock.Anything, id).Return(n, nil)
+
+	result, sent, err := ps.ProcessAndSend(context.Background(), id)
+
+	require.NoError(t, err)
+	assert.False(t, sent)
+	assert.Equal(t, domain.NotificationStatusCancelled, result.Status)
+	smsProv.AssertNotCalled(t, "Send", mock.Anything, mock.Anything)
+	svc.AssertNotCalled(t, "MarkAsSent", mock.Anything, mock.Anything, mock.Anything)
+	svc.AssertExpectations(t)
+}
+
+func TestProcessingService_ProcessAndSend_AlreadySent(t *testing.T) {
+	svc := new(mockNotificationServiceForProcessing)
+	prod := new(mockNotificationProducerForProcessing)
+	smsProv := new(mockProvider)
+	providers := map[domain.NotificationChannel]provider.NotificationProvider{
+		domain.NotificationChannelSMS: smsProv,
+	}
+	ps := newTestProcessingService(svc, prod, providers, new(mockNotificationRepository))
+
+	id := uuid.New()
+	n := &domain.Notification{
+		ID:      id,
+		Channel: domain.NotificationChannelSMS,
+		Status:  domain.NotificationStatusSent,
+	}
+
+	svc.On("MarkAsProcessing", mock.Anything, id).Return(n, nil)
+
+	result, sent, err := ps.ProcessAndSend(context.Background(), id)
+
+	require.NoError(t, err)
+	assert.False(t, sent)
+	assert.Equal(t, domain.NotificationStatusSent, result.Status)
+	smsProv.AssertNotCalled(t, "Send", mock.Anything, mock.Anything)
+	svc.AssertNotCalled(t, "MarkAsSent", mock.Anything, mock.Anything, mock.Anything)
+	svc.AssertExpectations(t)
+}
+
+func TestProcessingService_ProcessAndSend_NoProvider(t *testing.T) {
+	svc := new(mockNotificationServiceForProcessing)
+	prod := new(mockNotificationProducerForProcessing)
+	// Empty providers map — no provider for "push" channel
+	providers := map[domain.NotificationChannel]provider.NotificationProvider{}
+	ps := newTestProcessingService(svc, prod, providers, new(mockNotificationRepository))
+
+	id := uuid.New()
+	n := &domain.Notification{
+		ID:        id,
+		Recipient: "device-token-123",
+		Channel:   domain.NotificationChannelPush,
+		Content:   "Hello push",
+		Status:    domain.NotificationStatusProcessing,
+	}
+
+	svc.On("MarkAsProcessing", mock.Anything, id).Return(n, nil)
+
+	result, sent, err := ps.ProcessAndSend(context.Background(), id)
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "no provider for channel push")
+	assert.False(t, sent)
+	assert.Nil(t, result)
+	svc.AssertExpectations(t)
+}
+
+func TestProcessingService_ProcessAndSend_ProviderSendError(t *testing.T) {
+	svc := new(mockNotificationServiceForProcessing)
+	prod := new(mockNotificationProducerForProcessing)
+	emailProv := new(mockProvider)
+	providers := map[domain.NotificationChannel]provider.NotificationProvider{
+		domain.NotificationChannelEmail: emailProv,
+	}
+	ps := newTestProcessingService(svc, prod, providers, new(mockNotificationRepository))
+
+	id := uuid.New()
+	n := &domain.Notification{
+		ID:        id,
+		Recipient: "test@example.com",
+		Channel:   domain.NotificationChannelEmail,
+		Content:   "Hello email",
+		Status:    domain.NotificationStatusProcessing,
+	}
+
+	svc.On("MarkAsProcessing", mock.Anything, id).Return(n, nil)
+	emailProv.On("Send", mock.Anything, &provider.ProviderRequest{
+		To: "test@example.com", Channel: "email", Content: "Hello email",
+	}).Return(nil, assert.AnError)
+
+	result, sent, err := ps.ProcessAndSend(context.Background(), id)
+
+	assert.Error(t, err)
+	assert.False(t, sent)
+	assert.Nil(t, result)
+	svc.AssertNotCalled(t, "MarkAsSent", mock.Anything, mock.Anything, mock.Anything)
+	svc.AssertExpectations(t)
+	emailProv.AssertExpectations(t)
+}
+
+func TestProcessingService_ProcessAndSend_MarkAsSentError(t *testing.T) {
+	svc := new(mockNotificationServiceForProcessing)
+	prod := new(mockNotificationProducerForProcessing)
+	smsProv := new(mockProvider)
+	providers := map[domain.NotificationChannel]provider.NotificationProvider{
+		domain.NotificationChannelSMS: smsProv,
+	}
+	ps := newTestProcessingService(svc, prod, providers, new(mockNotificationRepository))
+
+	id := uuid.New()
+	n := &domain.Notification{
+		ID:        id,
+		Recipient: "+1234567890",
+		Channel:   domain.NotificationChannelSMS,
+		Content:   "Hello",
+		Status:    domain.NotificationStatusProcessing,
+	}
+
+	svc.On("MarkAsProcessing", mock.Anything, id).Return(n, nil)
+	smsProv.On("Send", mock.Anything, &provider.ProviderRequest{
+		To: "+1234567890", Channel: "sms", Content: "Hello",
+	}).Return(&provider.ProviderResponse{MessageID: "prov-456"}, nil)
+	svc.On("MarkAsSent", mock.Anything, id, "prov-456").Return(assert.AnError)
+
+	result, sent, err := ps.ProcessAndSend(context.Background(), id)
+
+	assert.Error(t, err)
+	assert.False(t, sent)
+	assert.Nil(t, result)
+	svc.AssertExpectations(t)
+	smsProv.AssertExpectations(t)
+}
+
 // --- HandleDeliveryFailure Tests ---
 
 func TestProcessingService_HandleDeliveryFailure_Retry(t *testing.T) {
@@ -485,7 +966,136 @@ func TestProcessingService_HandleDeliveryFailure_PermanentFailure(t *testing.T) 
 	svc.AssertExpectations(t)
 }
 
-// --- RecoverStuckNotifications & PublishDueScheduled Tests ---
+func TestProcessingService_HandleDeliveryFailure_MarkAsRetryingError(t *testing.T) {
+	svc := new(mockNotificationServiceForProcessing)
+	prod := new(mockNotificationProducerForProcessing)
+	providers := map[domain.NotificationChannel]provider.NotificationProvider{}
+	ps := newTestProcessingService(svc, prod, providers, new(mockNotificationRepository))
+
+	id := uuid.New()
+
+	svc.On("MarkAsRetrying", mock.Anything, id).Return(assert.AnError)
+
+	result, err := ps.HandleDeliveryFailure(context.Background(), id, 0, 3)
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to mark as retrying")
+	assert.Nil(t, result)
+	svc.AssertNotCalled(t, "GetByID", mock.Anything, mock.Anything)
+	prod.AssertNotCalled(t, "PublishToRetry", mock.Anything, mock.Anything, mock.Anything)
+	svc.AssertExpectations(t)
+}
+
+func TestProcessingService_HandleDeliveryFailure_GetByIDErrorDuringRetry(t *testing.T) {
+	svc := new(mockNotificationServiceForProcessing)
+	prod := new(mockNotificationProducerForProcessing)
+	providers := map[domain.NotificationChannel]provider.NotificationProvider{}
+	ps := newTestProcessingService(svc, prod, providers, new(mockNotificationRepository))
+
+	id := uuid.New()
+
+	svc.On("MarkAsRetrying", mock.Anything, id).Return(nil)
+	svc.On("GetByID", mock.Anything, id).Return(nil, assert.AnError)
+
+	result, err := ps.HandleDeliveryFailure(context.Background(), id, 1, 3)
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to get notification for retry")
+	assert.Nil(t, result)
+	prod.AssertNotCalled(t, "PublishToRetry", mock.Anything, mock.Anything, mock.Anything)
+	svc.AssertExpectations(t)
+}
+
+func TestProcessingService_HandleDeliveryFailure_PublishToRetryError(t *testing.T) {
+	svc := new(mockNotificationServiceForProcessing)
+	prod := new(mockNotificationProducerForProcessing)
+	providers := map[domain.NotificationChannel]provider.NotificationProvider{}
+	ps := newTestProcessingService(svc, prod, providers, new(mockNotificationRepository))
+
+	id := uuid.New()
+	n := &domain.Notification{
+		ID:      id,
+		Channel: domain.NotificationChannelSMS,
+		Status:  domain.NotificationStatusRetrying,
+	}
+
+	svc.On("MarkAsRetrying", mock.Anything, id).Return(nil)
+	svc.On("GetByID", mock.Anything, id).Return(n, nil)
+	prod.On("PublishToRetry", mock.Anything, n, int32(2)).Return(assert.AnError)
+
+	result, err := ps.HandleDeliveryFailure(context.Background(), id, 1, 3)
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to publish to retry")
+	assert.Nil(t, result)
+	svc.AssertExpectations(t)
+	prod.AssertExpectations(t)
+}
+
+func TestProcessingService_HandleDeliveryFailure_MaxRetries(t *testing.T) {
+	svc := new(mockNotificationServiceForProcessing)
+	prod := new(mockNotificationProducerForProcessing)
+	providers := map[domain.NotificationChannel]provider.NotificationProvider{}
+	ps := newTestProcessingService(svc, prod, providers, new(mockNotificationRepository))
+
+	id := uuid.New()
+	n := &domain.Notification{
+		ID:     id,
+		Status: domain.NotificationStatusFailed,
+	}
+
+	// retryCount == maxRetries (5 == 5)
+	svc.On("MarkAsFailed", mock.Anything, id, "max retries exceeded", 5).Return(nil)
+	svc.On("GetByID", mock.Anything, id).Return(n, nil)
+
+	result, err := ps.HandleDeliveryFailure(context.Background(), id, 5, 5)
+
+	require.NoError(t, err)
+	assert.Equal(t, domain.NotificationStatusFailed, result.Status)
+	prod.AssertNotCalled(t, "PublishToRetry", mock.Anything, mock.Anything, mock.Anything)
+	svc.AssertNotCalled(t, "MarkAsRetrying", mock.Anything, mock.Anything)
+	svc.AssertExpectations(t)
+}
+
+func TestProcessingService_HandleDeliveryFailure_MarkAsFailedError(t *testing.T) {
+	svc := new(mockNotificationServiceForProcessing)
+	prod := new(mockNotificationProducerForProcessing)
+	providers := map[domain.NotificationChannel]provider.NotificationProvider{}
+	ps := newTestProcessingService(svc, prod, providers, new(mockNotificationRepository))
+
+	id := uuid.New()
+
+	svc.On("MarkAsFailed", mock.Anything, id, "max retries exceeded", 3).Return(assert.AnError)
+
+	result, err := ps.HandleDeliveryFailure(context.Background(), id, 3, 3)
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to mark as failed")
+	assert.Nil(t, result)
+	svc.AssertNotCalled(t, "GetByID", mock.Anything, mock.Anything)
+	svc.AssertExpectations(t)
+}
+
+func TestProcessingService_HandleDeliveryFailure_GetByIDErrorAfterFailure(t *testing.T) {
+	svc := new(mockNotificationServiceForProcessing)
+	prod := new(mockNotificationProducerForProcessing)
+	providers := map[domain.NotificationChannel]provider.NotificationProvider{}
+	ps := newTestProcessingService(svc, prod, providers, new(mockNotificationRepository))
+
+	id := uuid.New()
+
+	svc.On("MarkAsFailed", mock.Anything, id, "max retries exceeded", 3).Return(nil)
+	svc.On("GetByID", mock.Anything, id).Return(nil, assert.AnError)
+
+	result, err := ps.HandleDeliveryFailure(context.Background(), id, 3, 3)
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to get notification after failure")
+	assert.Nil(t, result)
+	svc.AssertExpectations(t)
+}
+
+// --- RecoverStuckNotifications Tests ---
 
 func TestProcessingService_RecoverStuckNotifications(t *testing.T) {
 	svc := new(mockNotificationServiceForProcessing)
@@ -515,6 +1125,112 @@ func TestProcessingService_RecoverStuckNotifications(t *testing.T) {
 	svc.AssertExpectations(t)
 }
 
+func TestProcessingService_RecoverStuckNotifications_Success(t *testing.T) {
+	svc := new(mockNotificationServiceForProcessing)
+	prod := new(mockNotificationProducerForProcessing)
+	repo := new(mockNotificationRepository)
+	providers := map[domain.NotificationChannel]provider.NotificationProvider{}
+	ps := newTestProcessingService(svc, prod, providers, repo)
+
+	id1 := uuid.New()
+	stuckNotifications := []*domain.Notification{
+		{ID: id1, Status: domain.NotificationStatusPending, Channel: domain.NotificationChannelSMS},
+	}
+
+	repo.On("GetRecoverableNotifications", mock.Anything, 30*time.Second).Return(stuckNotifications, nil)
+	prod.On("Publish", mock.Anything, stuckNotifications[0]).Return(nil)
+	svc.On("MarkAsQueued", mock.Anything, id1).Return(nil)
+
+	err := ps.RecoverStuckNotifications(context.Background())
+
+	require.NoError(t, err)
+	repo.AssertExpectations(t)
+	prod.AssertExpectations(t)
+	svc.AssertExpectations(t)
+}
+
+func TestProcessingService_RecoverStuckNotifications_GetError(t *testing.T) {
+	svc := new(mockNotificationServiceForProcessing)
+	prod := new(mockNotificationProducerForProcessing)
+	repo := new(mockNotificationRepository)
+	providers := map[domain.NotificationChannel]provider.NotificationProvider{}
+	ps := newTestProcessingService(svc, prod, providers, repo)
+
+	repo.On("GetRecoverableNotifications", mock.Anything, 30*time.Second).Return(nil, assert.AnError)
+
+	err := ps.RecoverStuckNotifications(context.Background())
+
+	// Returns nil even on error (logs the error instead)
+	require.NoError(t, err)
+	prod.AssertNotCalled(t, "Publish", mock.Anything, mock.Anything)
+	svc.AssertNotCalled(t, "MarkAsQueued", mock.Anything, mock.Anything)
+	repo.AssertExpectations(t)
+}
+
+func TestProcessingService_RecoverStuckNotifications_PublishError(t *testing.T) {
+	svc := new(mockNotificationServiceForProcessing)
+	prod := new(mockNotificationProducerForProcessing)
+	repo := new(mockNotificationRepository)
+	providers := map[domain.NotificationChannel]provider.NotificationProvider{}
+	ps := newTestProcessingService(svc, prod, providers, repo)
+
+	id1 := uuid.New()
+	id2 := uuid.New()
+	stuckNotifications := []*domain.Notification{
+		{ID: id1, Status: domain.NotificationStatusPending, Channel: domain.NotificationChannelSMS},
+		{ID: id2, Status: domain.NotificationStatusPending, Channel: domain.NotificationChannelEmail},
+	}
+
+	repo.On("GetRecoverableNotifications", mock.Anything, 30*time.Second).Return(stuckNotifications, nil)
+	// First publish fails, second succeeds
+	prod.On("Publish", mock.Anything, stuckNotifications[0]).Return(assert.AnError)
+	prod.On("Publish", mock.Anything, stuckNotifications[1]).Return(nil)
+	svc.On("MarkAsQueued", mock.Anything, id2).Return(nil)
+
+	err := ps.RecoverStuckNotifications(context.Background())
+
+	require.NoError(t, err)
+	// MarkAsQueued should NOT be called for first notification (publish failed)
+	svc.AssertNotCalled(t, "MarkAsQueued", mock.Anything, id1)
+	// MarkAsQueued should be called for second notification
+	svc.AssertCalled(t, "MarkAsQueued", mock.Anything, id2)
+	repo.AssertExpectations(t)
+	prod.AssertExpectations(t)
+	svc.AssertExpectations(t)
+}
+
+func TestProcessingService_RecoverStuckNotifications_MarkAsQueuedError(t *testing.T) {
+	svc := new(mockNotificationServiceForProcessing)
+	prod := new(mockNotificationProducerForProcessing)
+	repo := new(mockNotificationRepository)
+	providers := map[domain.NotificationChannel]provider.NotificationProvider{}
+	ps := newTestProcessingService(svc, prod, providers, repo)
+
+	id1 := uuid.New()
+	id2 := uuid.New()
+	stuckNotifications := []*domain.Notification{
+		{ID: id1, Status: domain.NotificationStatusPending, Channel: domain.NotificationChannelSMS},
+		{ID: id2, Status: domain.NotificationStatusPending, Channel: domain.NotificationChannelEmail},
+	}
+
+	repo.On("GetRecoverableNotifications", mock.Anything, 30*time.Second).Return(stuckNotifications, nil)
+	prod.On("Publish", mock.Anything, stuckNotifications[0]).Return(nil)
+	prod.On("Publish", mock.Anything, stuckNotifications[1]).Return(nil)
+	// First MarkAsQueued fails, second succeeds
+	svc.On("MarkAsQueued", mock.Anything, id1).Return(assert.AnError)
+	svc.On("MarkAsQueued", mock.Anything, id2).Return(nil)
+
+	err := ps.RecoverStuckNotifications(context.Background())
+
+	require.NoError(t, err)
+	// Both should still be attempted (continues on error)
+	repo.AssertExpectations(t)
+	prod.AssertExpectations(t)
+	svc.AssertExpectations(t)
+}
+
+// --- PublishDueScheduled Tests ---
+
 func TestProcessingService_PublishDueScheduled(t *testing.T) {
 	svc := new(mockNotificationServiceForProcessing)
 	prod := new(mockNotificationProducerForProcessing)
@@ -539,6 +1255,113 @@ func TestProcessingService_PublishDueScheduled(t *testing.T) {
 	err := ps.PublishDueScheduled(context.Background())
 
 	require.NoError(t, err)
+	repo.AssertExpectations(t)
+	prod.AssertExpectations(t)
+	svc.AssertExpectations(t)
+}
+
+func TestProcessingService_PublishDueScheduled_Success(t *testing.T) {
+	svc := new(mockNotificationServiceForProcessing)
+	prod := new(mockNotificationProducerForProcessing)
+	repo := new(mockNotificationRepository)
+	providers := map[domain.NotificationChannel]provider.NotificationProvider{}
+	ps := newTestProcessingService(svc, prod, providers, repo)
+
+	id1 := uuid.New()
+	pastTime := time.Now().UTC().Add(-30 * time.Minute)
+	dueNotifications := []*domain.Notification{
+		{ID: id1, Status: domain.NotificationStatusScheduled, Channel: domain.NotificationChannelPush, ScheduledAt: &pastTime},
+	}
+
+	repo.On("GetDueScheduledNotifications", mock.Anything).Return(dueNotifications, nil)
+	prod.On("Publish", mock.Anything, dueNotifications[0]).Return(nil)
+	svc.On("MarkAsQueued", mock.Anything, id1).Return(nil)
+
+	err := ps.PublishDueScheduled(context.Background())
+
+	require.NoError(t, err)
+	repo.AssertExpectations(t)
+	prod.AssertExpectations(t)
+	svc.AssertExpectations(t)
+}
+
+func TestProcessingService_PublishDueScheduled_GetError(t *testing.T) {
+	svc := new(mockNotificationServiceForProcessing)
+	prod := new(mockNotificationProducerForProcessing)
+	repo := new(mockNotificationRepository)
+	providers := map[domain.NotificationChannel]provider.NotificationProvider{}
+	ps := newTestProcessingService(svc, prod, providers, repo)
+
+	repo.On("GetDueScheduledNotifications", mock.Anything).Return(nil, assert.AnError)
+
+	err := ps.PublishDueScheduled(context.Background())
+
+	// Returns nil even on error (logs the error instead)
+	require.NoError(t, err)
+	prod.AssertNotCalled(t, "Publish", mock.Anything, mock.Anything)
+	svc.AssertNotCalled(t, "MarkAsQueued", mock.Anything, mock.Anything)
+	repo.AssertExpectations(t)
+}
+
+func TestProcessingService_PublishDueScheduled_PublishError(t *testing.T) {
+	svc := new(mockNotificationServiceForProcessing)
+	prod := new(mockNotificationProducerForProcessing)
+	repo := new(mockNotificationRepository)
+	providers := map[domain.NotificationChannel]provider.NotificationProvider{}
+	ps := newTestProcessingService(svc, prod, providers, repo)
+
+	id1 := uuid.New()
+	id2 := uuid.New()
+	pastTime := time.Now().UTC().Add(-1 * time.Hour)
+	dueNotifications := []*domain.Notification{
+		{ID: id1, Status: domain.NotificationStatusScheduled, Channel: domain.NotificationChannelSMS, ScheduledAt: &pastTime},
+		{ID: id2, Status: domain.NotificationStatusScheduled, Channel: domain.NotificationChannelEmail, ScheduledAt: &pastTime},
+	}
+
+	repo.On("GetDueScheduledNotifications", mock.Anything).Return(dueNotifications, nil)
+	// First publish fails, second succeeds
+	prod.On("Publish", mock.Anything, dueNotifications[0]).Return(assert.AnError)
+	prod.On("Publish", mock.Anything, dueNotifications[1]).Return(nil)
+	svc.On("MarkAsQueued", mock.Anything, id2).Return(nil)
+
+	err := ps.PublishDueScheduled(context.Background())
+
+	require.NoError(t, err)
+	// MarkAsQueued should NOT be called for first notification (publish failed)
+	svc.AssertNotCalled(t, "MarkAsQueued", mock.Anything, id1)
+	// MarkAsQueued should be called for second notification
+	svc.AssertCalled(t, "MarkAsQueued", mock.Anything, id2)
+	repo.AssertExpectations(t)
+	prod.AssertExpectations(t)
+	svc.AssertExpectations(t)
+}
+
+func TestProcessingService_PublishDueScheduled_MarkAsQueuedError(t *testing.T) {
+	svc := new(mockNotificationServiceForProcessing)
+	prod := new(mockNotificationProducerForProcessing)
+	repo := new(mockNotificationRepository)
+	providers := map[domain.NotificationChannel]provider.NotificationProvider{}
+	ps := newTestProcessingService(svc, prod, providers, repo)
+
+	id1 := uuid.New()
+	id2 := uuid.New()
+	pastTime := time.Now().UTC().Add(-1 * time.Hour)
+	dueNotifications := []*domain.Notification{
+		{ID: id1, Status: domain.NotificationStatusScheduled, Channel: domain.NotificationChannelSMS, ScheduledAt: &pastTime},
+		{ID: id2, Status: domain.NotificationStatusScheduled, Channel: domain.NotificationChannelEmail, ScheduledAt: &pastTime},
+	}
+
+	repo.On("GetDueScheduledNotifications", mock.Anything).Return(dueNotifications, nil)
+	prod.On("Publish", mock.Anything, dueNotifications[0]).Return(nil)
+	prod.On("Publish", mock.Anything, dueNotifications[1]).Return(nil)
+	// First MarkAsQueued fails, second succeeds
+	svc.On("MarkAsQueued", mock.Anything, id1).Return(assert.AnError)
+	svc.On("MarkAsQueued", mock.Anything, id2).Return(nil)
+
+	err := ps.PublishDueScheduled(context.Background())
+
+	require.NoError(t, err)
+	// Both should still be attempted (continues on error)
 	repo.AssertExpectations(t)
 	prod.AssertExpectations(t)
 	svc.AssertExpectations(t)

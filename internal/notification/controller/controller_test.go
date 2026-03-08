@@ -371,6 +371,29 @@ func TestController_Create_PublishFails_StillReturns201(t *testing.T) {
 	processingSvc.AssertExpectations(t)
 }
 
+func TestController_Create_GenericError(t *testing.T) {
+	svc := new(mockNotificationService)
+	processingSvc := new(mockNotificationProcessingService)
+	app := setupTestApp(svc, processingSvc)
+
+	processingSvc.On("Create", mock.Anything, mock.AnythingOfType("domain.NotificationCreateRequest"), (*string)(nil)).
+		Return(nil, fmt.Errorf("unexpected db failure"))
+
+	body := `{"recipient":"+1234567890","channel":"sms","content":"Hello"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/notifications", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
+
+	apiResp := parseAPIResponse(t, resp.Body)
+	assert.False(t, apiResp.Success)
+	assert.Equal(t, "INTERNAL_ERROR", apiResp.Error.Code)
+
+	processingSvc.AssertExpectations(t)
+}
+
 // --- CreateBatch Tests ---
 
 func TestController_CreateBatch_Success(t *testing.T) {
@@ -461,6 +484,52 @@ func TestController_CreateBatch_MixedScheduledAndPending(t *testing.T) {
 	resp, err := app.Test(req)
 	require.NoError(t, err)
 	assert.Equal(t, http.StatusCreated, resp.StatusCode)
+
+	processingSvc.AssertExpectations(t)
+}
+
+func TestController_CreateBatch_AppError(t *testing.T) {
+	svc := new(mockNotificationService)
+	processingSvc := new(mockNotificationProcessingService)
+	app := setupTestApp(svc, processingSvc)
+
+	processingSvc.On("CreateBatch", mock.Anything, mock.AnythingOfType("domain.NotificationBatchCreateRequest")).
+		Return(nil, uuid.Nil, errs.NewAppError("BATCH_TOO_LARGE", "batch size exceeds maximum of 1000", http.StatusBadRequest))
+
+	body := `{"notifications":[{"recipient":"+905551111111","channel":"sms","content":"Hello 1"}]}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/notifications/batch", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+
+	apiResp := parseAPIResponse(t, resp.Body)
+	assert.False(t, apiResp.Success)
+	assert.Equal(t, "BATCH_TOO_LARGE", apiResp.Error.Code)
+
+	processingSvc.AssertExpectations(t)
+}
+
+func TestController_CreateBatch_GenericError(t *testing.T) {
+	svc := new(mockNotificationService)
+	processingSvc := new(mockNotificationProcessingService)
+	app := setupTestApp(svc, processingSvc)
+
+	processingSvc.On("CreateBatch", mock.Anything, mock.AnythingOfType("domain.NotificationBatchCreateRequest")).
+		Return(nil, uuid.Nil, fmt.Errorf("db connection lost"))
+
+	body := `{"notifications":[{"recipient":"+905551111111","channel":"sms","content":"Hello 1"}]}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/notifications/batch", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
+
+	apiResp := parseAPIResponse(t, resp.Body)
+	assert.False(t, apiResp.Success)
+	assert.Equal(t, "INTERNAL_ERROR", apiResp.Error.Code)
 
 	processingSvc.AssertExpectations(t)
 }
@@ -592,6 +661,50 @@ func TestController_GetByBatchID_InvalidUUID(t *testing.T) {
 	apiResp := parseAPIResponse(t, resp.Body)
 	assert.False(t, apiResp.Success)
 	assert.Equal(t, "INVALID_ID", apiResp.Error.Code)
+}
+
+func TestController_GetByBatchID_AppError(t *testing.T) {
+	svc := new(mockNotificationService)
+	processingSvc := new(mockNotificationProcessingService)
+	app := setupTestApp(svc, processingSvc)
+
+	batchID := uuid.New()
+	svc.On("GetByBatchID", mock.Anything, batchID).
+		Return(nil, errs.NewAppError("BATCH_NOT_FOUND", "batch not found", http.StatusNotFound))
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/notifications/batch/"+batchID.String(), nil)
+
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusNotFound, resp.StatusCode)
+
+	apiResp := parseAPIResponse(t, resp.Body)
+	assert.False(t, apiResp.Success)
+	assert.Equal(t, "BATCH_NOT_FOUND", apiResp.Error.Code)
+
+	svc.AssertExpectations(t)
+}
+
+func TestController_GetByBatchID_GenericError(t *testing.T) {
+	svc := new(mockNotificationService)
+	processingSvc := new(mockNotificationProcessingService)
+	app := setupTestApp(svc, processingSvc)
+
+	batchID := uuid.New()
+	svc.On("GetByBatchID", mock.Anything, batchID).
+		Return(nil, fmt.Errorf("database timeout"))
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/notifications/batch/"+batchID.String(), nil)
+
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
+
+	apiResp := parseAPIResponse(t, resp.Body)
+	assert.False(t, apiResp.Success)
+	assert.Equal(t, "INTERNAL_ERROR", apiResp.Error.Code)
+
+	svc.AssertExpectations(t)
 }
 
 // --- List Tests ---
@@ -727,6 +840,58 @@ func TestController_List_LimitCapped(t *testing.T) {
 	svc.AssertExpectations(t)
 }
 
+func TestController_List_AppError(t *testing.T) {
+	svc := new(mockNotificationService)
+	processingSvc := new(mockNotificationProcessingService)
+	app := setupTestApp(svc, processingSvc)
+
+	expectedFilter := domain.NotificationListFilter{
+		Limit:  20,
+		Offset: 0,
+	}
+
+	svc.On("List", mock.Anything, expectedFilter).
+		Return(nil, int64(0), errs.NewAppError("INVALID_STATUS", "invalid notification status", http.StatusBadRequest))
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/notifications", nil)
+
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+
+	apiResp := parseAPIResponse(t, resp.Body)
+	assert.False(t, apiResp.Success)
+	assert.Equal(t, "INVALID_STATUS", apiResp.Error.Code)
+
+	svc.AssertExpectations(t)
+}
+
+func TestController_List_GenericError(t *testing.T) {
+	svc := new(mockNotificationService)
+	processingSvc := new(mockNotificationProcessingService)
+	app := setupTestApp(svc, processingSvc)
+
+	expectedFilter := domain.NotificationListFilter{
+		Limit:  20,
+		Offset: 0,
+	}
+
+	svc.On("List", mock.Anything, expectedFilter).
+		Return(nil, int64(0), fmt.Errorf("query execution failed"))
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/notifications", nil)
+
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
+
+	apiResp := parseAPIResponse(t, resp.Body)
+	assert.False(t, apiResp.Success)
+	assert.Equal(t, "INTERNAL_ERROR", apiResp.Error.Code)
+
+	svc.AssertExpectations(t)
+}
+
 // --- Cancel Tests ---
 
 func TestController_Cancel_Success(t *testing.T) {
@@ -810,6 +975,27 @@ func TestController_Cancel_NotFound(t *testing.T) {
 	resp, err := app.Test(req)
 	require.NoError(t, err)
 	assert.Equal(t, http.StatusNotFound, resp.StatusCode)
+
+	svc.AssertExpectations(t)
+}
+
+func TestController_Cancel_GenericError(t *testing.T) {
+	svc := new(mockNotificationService)
+	processingSvc := new(mockNotificationProcessingService)
+	app := setupTestApp(svc, processingSvc)
+
+	notifID := uuid.New()
+	svc.On("Cancel", mock.Anything, notifID).Return(nil, fmt.Errorf("unexpected failure"))
+
+	req := httptest.NewRequest(http.MethodPatch, "/api/v1/notifications/"+notifID.String()+"/cancel", nil)
+
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
+
+	apiResp := parseAPIResponse(t, resp.Body)
+	assert.False(t, apiResp.Success)
+	assert.Equal(t, "INTERNAL_ERROR", apiResp.Error.Code)
 
 	svc.AssertExpectations(t)
 }

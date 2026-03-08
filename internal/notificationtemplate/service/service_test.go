@@ -2,11 +2,13 @@ package service
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 
 	"github.com/bariskaral/insider-notification-hub/internal/notificationtemplate/domain"
 )
@@ -368,4 +370,174 @@ func TestToResponseList_Maps(t *testing.T) {
 	assert.Len(t, responses, 2)
 	assert.Equal(t, "a", responses[0].Name)
 	assert.Equal(t, "b", responses[1].Name)
+}
+
+// --- GetByID tests ---
+
+func TestGetByID_Success(t *testing.T) {
+	repo := new(mockRepository)
+	svc := NewNotificationTemplateService(repo)
+	ctx := context.Background()
+	templateID := uuid.New()
+
+	expected := &domain.NotificationTemplate{
+		ID:      templateID,
+		Name:    "order_shipped",
+		Channel: "sms",
+		Content: "Your order has been shipped.",
+	}
+
+	repo.On("GetByID", ctx, templateID).Return(expected, nil)
+
+	result, err := svc.GetByID(ctx, templateID)
+
+	require.NoError(t, err)
+	assert.Equal(t, expected, result)
+	assert.Equal(t, templateID, result.ID)
+	assert.Equal(t, "order_shipped", result.Name)
+	assert.Equal(t, "sms", result.Channel)
+	assert.Equal(t, "Your order has been shipped.", result.Content)
+	repo.AssertExpectations(t)
+}
+
+func TestGetByID_NotFound(t *testing.T) {
+	repo := new(mockRepository)
+	svc := NewNotificationTemplateService(repo)
+	ctx := context.Background()
+	templateID := uuid.New()
+
+	repo.On("GetByID", ctx, templateID).Return(nil, domain.ErrNotificationTemplateNotFound)
+
+	result, err := svc.GetByID(ctx, templateID)
+
+	assert.Nil(t, result)
+	assert.Equal(t, domain.ErrNotificationTemplateNotFound, err)
+	repo.AssertExpectations(t)
+}
+
+// --- List tests ---
+
+func TestList_Success(t *testing.T) {
+	repo := new(mockRepository)
+	svc := NewNotificationTemplateService(repo)
+	ctx := context.Background()
+
+	templates := []*domain.NotificationTemplate{
+		{ID: uuid.New(), Name: "template_a", Channel: "sms", Content: "content a"},
+		{ID: uuid.New(), Name: "template_b", Channel: "email", Content: "content b"},
+		{ID: uuid.New(), Name: "template_c", Channel: "push", Content: "content c"},
+	}
+
+	repo.On("List", ctx, 10, 0).Return(templates, int64(3), nil)
+
+	result, total, err := svc.List(ctx, 10, 0)
+
+	require.NoError(t, err)
+	assert.Len(t, result, 3)
+	assert.Equal(t, int64(3), total)
+	assert.Equal(t, "template_a", result[0].Name)
+	assert.Equal(t, "template_b", result[1].Name)
+	assert.Equal(t, "template_c", result[2].Name)
+	repo.AssertExpectations(t)
+}
+
+func TestList_Empty(t *testing.T) {
+	repo := new(mockRepository)
+	svc := NewNotificationTemplateService(repo)
+	ctx := context.Background()
+
+	repo.On("List", ctx, 10, 0).Return([]*domain.NotificationTemplate{}, int64(0), nil)
+
+	result, total, err := svc.List(ctx, 10, 0)
+
+	require.NoError(t, err)
+	assert.Len(t, result, 0)
+	assert.Equal(t, int64(0), total)
+	repo.AssertExpectations(t)
+}
+
+// --- Delete tests ---
+
+func TestDelete_Success(t *testing.T) {
+	repo := new(mockRepository)
+	svc := NewNotificationTemplateService(repo)
+	ctx := context.Background()
+	templateID := uuid.New()
+
+	repo.On("Delete", ctx, templateID).Return(nil)
+
+	err := svc.Delete(ctx, templateID)
+
+	assert.NoError(t, err)
+	repo.AssertExpectations(t)
+}
+
+func TestDelete_NotFound(t *testing.T) {
+	repo := new(mockRepository)
+	svc := NewNotificationTemplateService(repo)
+	ctx := context.Background()
+	templateID := uuid.New()
+
+	repo.On("Delete", ctx, templateID).Return(domain.ErrNotificationTemplateNotFound)
+
+	err := svc.Delete(ctx, templateID)
+
+	assert.Error(t, err)
+	assert.Equal(t, domain.ErrNotificationTemplateNotFound, err)
+	repo.AssertExpectations(t)
+}
+
+// --- Create error tests ---
+
+func TestCreate_RepositoryError(t *testing.T) {
+	repo := new(mockRepository)
+	svc := NewNotificationTemplateService(repo)
+	ctx := context.Background()
+
+	req := domain.NotificationTemplateCreateRequest{
+		Name:    "duplicate_name",
+		Channel: "sms",
+		Content: "content",
+	}
+
+	repoErr := errors.New("database connection failed")
+	repo.On("Create", ctx, mock.AnythingOfType("*domain.NotificationTemplate")).Return(repoErr)
+
+	result, err := svc.Create(ctx, req)
+
+	assert.Nil(t, result)
+	assert.Error(t, err)
+	assert.Equal(t, repoErr, err)
+	repo.AssertExpectations(t)
+}
+
+// --- Update error tests ---
+
+func TestUpdate_RepositoryUpdateError(t *testing.T) {
+	repo := new(mockRepository)
+	svc := NewNotificationTemplateService(repo)
+	ctx := context.Background()
+	templateID := uuid.New()
+
+	existing := &domain.NotificationTemplate{
+		ID:      templateID,
+		Name:    "old_name",
+		Channel: "sms",
+		Content: "old content",
+	}
+
+	newName := "new_name"
+	updateErr := errors.New("database write failed")
+
+	repo.On("GetByID", ctx, templateID).Return(existing, nil)
+	repo.On("Update", ctx, existing).Return(updateErr)
+
+	result, err := svc.Update(ctx, templateID, domain.NotificationTemplateUpdateRequest{
+		Name: &newName,
+	})
+
+	assert.Nil(t, result)
+	assert.Error(t, err)
+	assert.Equal(t, updateErr, err)
+	repo.AssertExpectations(t)
 }

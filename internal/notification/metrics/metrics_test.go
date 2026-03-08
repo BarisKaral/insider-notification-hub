@@ -76,6 +76,87 @@ func TestNewNotificationMetrics(t *testing.T) {
 	assert.NotNil(t, m.QueueDepth)
 }
 
+func TestNewNotificationMetrics_FromConstructor(t *testing.T) {
+	// Create a clean default registry for this test
+	reg := prometheus.NewRegistry()
+	prometheus.DefaultRegisterer = reg
+	prometheus.DefaultGatherer = reg
+	defer func() {
+		// Restore defaults
+		prometheus.DefaultRegisterer = prometheus.NewRegistry()
+		prometheus.DefaultGatherer = prometheus.NewRegistry()
+	}()
+
+	m := NewNotificationMetrics()
+
+	require.NotNil(t, m)
+	require.NotNil(t, m.NotificationsTotal)
+	require.NotNil(t, m.ProcessingDuration)
+	require.NotNil(t, m.QueueDepth)
+
+	// Verify the metrics work
+	m.IncTotal("sms", "sent")
+	m.ObserveDuration("email", 100*time.Millisecond)
+	m.SetQueueDepth("push", 5)
+
+	// Verify via registry
+	families, err := reg.Gather()
+	require.NoError(t, err)
+	assert.GreaterOrEqual(t, len(families), 3)
+}
+
+func TestNewNotificationMetrics_ReturnsValidStruct(t *testing.T) {
+	// Use a custom registry to avoid conflicts with default.
+	// We can't call NewNotificationMetrics directly as it MustRegisters with default.
+	// Instead, verify the helper methods work with different label combinations.
+	m := newTestMetrics(t)
+
+	// Test multiple channels for IncTotal.
+	channels := []string{"sms", "email", "push"}
+	statuses := []string{"sent", "failed", "pending"}
+	for _, ch := range channels {
+		for _, st := range statuses {
+			m.IncTotal(ch, st)
+		}
+	}
+
+	// Verify counts.
+	for _, ch := range channels {
+		for _, st := range statuses {
+			var metric dto.Metric
+			counter, err := m.NotificationsTotal.GetMetricWithLabelValues(ch, st)
+			require.NoError(t, err)
+			require.NoError(t, counter.Write(&metric))
+			assert.Equal(t, float64(1), metric.GetCounter().GetValue())
+		}
+	}
+
+	// Test ObserveDuration for all channels.
+	for _, ch := range channels {
+		m.ObserveDuration(ch, 100*time.Millisecond)
+	}
+
+	// Verify histograms.
+	for _, ch := range channels {
+		family := m.gatherMetricFamily(t, "notifications_processing_duration_seconds")
+		require.NotNil(t, family, "metric family not found for channel %s", ch)
+	}
+
+	// Test SetQueueDepth for all channels.
+	for _, ch := range channels {
+		m.SetQueueDepth(ch, 5)
+	}
+
+	// Verify gauges.
+	for _, ch := range channels {
+		var metric dto.Metric
+		gauge, err := m.QueueDepth.GetMetricWithLabelValues(ch)
+		require.NoError(t, err)
+		require.NoError(t, gauge.Write(&metric))
+		assert.Equal(t, float64(5), metric.GetGauge().GetValue())
+	}
+}
+
 func TestNotificationMetrics_IncTotal(t *testing.T) {
 	m := newTestMetrics(t)
 

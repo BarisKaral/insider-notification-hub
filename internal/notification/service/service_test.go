@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"testing"
 	"time"
 
@@ -143,6 +144,8 @@ func newTestService(repo *mockNotificationRepository, tmplSvc *mockTemplateServi
 	return NewNotificationService(repo, tmplSvc)
 }
 
+// --- Create ---
+
 func TestNotificationService_Create_DirectContent(t *testing.T) {
 	repo := new(mockNotificationRepository)
 	tmplSvc := new(mockTemplateService)
@@ -208,6 +211,60 @@ func TestNotificationService_Create_WithTemplate(t *testing.T) {
 	repo.AssertExpectations(t)
 }
 
+func TestNotificationService_Create_WithTemplateNilVariables(t *testing.T) {
+	repo := new(mockNotificationRepository)
+	tmplSvc := new(mockTemplateService)
+	svc := newTestService(repo, tmplSvc)
+
+	templateID := uuid.New()
+	req := domain.NotificationCreateRequest{
+		Recipient:  "john@example.com",
+		Channel:    "email",
+		TemplateID: &templateID,
+		Variables:  nil, // nil variables
+	}
+
+	tmplSvc.On("Render", mock.Anything, templateID, (map[string]string)(nil)).Return("Hello default", nil)
+	repo.On("Create", mock.Anything, mock.AnythingOfType("*domain.Notification")).Return(nil)
+
+	result, err := svc.Create(context.Background(), req, nil)
+
+	require.NoError(t, err)
+	assert.Equal(t, "Hello default", result.Content)
+	assert.Equal(t, &templateID, result.TemplateID)
+	// templateVars should be nil since Variables was nil
+	assert.Nil(t, result.TemplateVars)
+
+	tmplSvc.AssertExpectations(t)
+	repo.AssertExpectations(t)
+}
+
+func TestNotificationService_Create_WithTemplateRenderFails(t *testing.T) {
+	repo := new(mockNotificationRepository)
+	tmplSvc := new(mockTemplateService)
+	svc := newTestService(repo, tmplSvc)
+
+	templateID := uuid.New()
+	variables := map[string]string{"name": "John"}
+	req := domain.NotificationCreateRequest{
+		Recipient:  "john@example.com",
+		Channel:    "email",
+		TemplateID: &templateID,
+		Variables:  variables,
+	}
+
+	renderErr := errors.New("template not found")
+	tmplSvc.On("Render", mock.Anything, templateID, variables).Return("", renderErr)
+
+	result, err := svc.Create(context.Background(), req, nil)
+
+	assert.Nil(t, result)
+	assert.ErrorIs(t, err, renderErr)
+	// repo.Create should never be called
+	repo.AssertNotCalled(t, "Create", mock.Anything, mock.Anything)
+	tmplSvc.AssertExpectations(t)
+}
+
 func TestNotificationService_Create_DuplicateIdempotencyKey(t *testing.T) {
 	repo := new(mockNotificationRepository)
 	tmplSvc := new(mockTemplateService)
@@ -228,6 +285,31 @@ func TestNotificationService_Create_DuplicateIdempotencyKey(t *testing.T) {
 
 	assert.Nil(t, result)
 	assert.ErrorIs(t, err, domain.ErrNotificationDuplicateIdempotencyKey)
+	repo.AssertExpectations(t)
+}
+
+func TestNotificationService_Create_IdempotencyKeyLookupError(t *testing.T) {
+	repo := new(mockNotificationRepository)
+	tmplSvc := new(mockTemplateService)
+	svc := newTestService(repo, tmplSvc)
+
+	content := "Hello"
+	key := "my-key"
+	req := domain.NotificationCreateRequest{
+		Recipient: "+1234567890",
+		Channel:   "sms",
+		Content:   &content,
+	}
+
+	dbErr := errors.New("database connection failed")
+	repo.On("GetByIdempotencyKey", mock.Anything, key).Return(nil, dbErr)
+
+	result, err := svc.Create(context.Background(), req, &key)
+
+	assert.Nil(t, result)
+	assert.ErrorIs(t, err, dbErr)
+	// repo.Create should never be called
+	repo.AssertNotCalled(t, "Create", mock.Anything, mock.Anything)
 	repo.AssertExpectations(t)
 }
 
@@ -254,6 +336,122 @@ func TestNotificationService_Create_ScheduledAtFuture(t *testing.T) {
 	assert.NotNil(t, result.ScheduledAt)
 	repo.AssertExpectations(t)
 }
+
+func TestNotificationService_Create_ScheduledAtPast(t *testing.T) {
+	repo := new(mockNotificationRepository)
+	tmplSvc := new(mockTemplateService)
+	svc := newTestService(repo, tmplSvc)
+
+	content := "Past scheduled message"
+	pastTime := time.Now().UTC().Add(-1 * time.Hour)
+	req := domain.NotificationCreateRequest{
+		Recipient:   "+1234567890",
+		Channel:     "sms",
+		Content:     &content,
+		ScheduledAt: &pastTime,
+	}
+
+	repo.On("Create", mock.Anything, mock.AnythingOfType("*domain.Notification")).Return(nil)
+
+	result, err := svc.Create(context.Background(), req, nil)
+
+	require.NoError(t, err)
+	// Past scheduled_at should result in pending, not scheduled
+	assert.Equal(t, domain.NotificationStatusPending, result.Status)
+	repo.AssertExpectations(t)
+}
+
+func TestNotificationService_Create_DefaultPriority(t *testing.T) {
+	repo := new(mockNotificationRepository)
+	tmplSvc := new(mockTemplateService)
+	svc := newTestService(repo, tmplSvc)
+
+	content := "Hello"
+	req := domain.NotificationCreateRequest{
+		Recipient: "+1234567890",
+		Channel:   "sms",
+		Content:   &content,
+		// No priority specified
+	}
+
+	repo.On("Create", mock.Anything, mock.AnythingOfType("*domain.Notification")).Return(nil)
+
+	result, err := svc.Create(context.Background(), req, nil)
+
+	require.NoError(t, err)
+	assert.Equal(t, domain.NotificationPriorityNormal, result.Priority)
+	repo.AssertExpectations(t)
+}
+
+func TestNotificationService_Create_RepoCreateFails(t *testing.T) {
+	repo := new(mockNotificationRepository)
+	tmplSvc := new(mockTemplateService)
+	svc := newTestService(repo, tmplSvc)
+
+	content := "Hello"
+	req := domain.NotificationCreateRequest{
+		Recipient: "+1234567890",
+		Channel:   "sms",
+		Content:   &content,
+	}
+
+	repoErr := errors.New("insert failed")
+	repo.On("Create", mock.Anything, mock.AnythingOfType("*domain.Notification")).Return(repoErr)
+
+	result, err := svc.Create(context.Background(), req, nil)
+
+	assert.Nil(t, result)
+	assert.ErrorIs(t, err, repoErr)
+	repo.AssertExpectations(t)
+}
+
+func TestNotificationService_Create_UniqueIdempotencyKey(t *testing.T) {
+	repo := new(mockNotificationRepository)
+	tmplSvc := new(mockTemplateService)
+	svc := newTestService(repo, tmplSvc)
+
+	content := "Hello"
+	key := "unique-key-123"
+	req := domain.NotificationCreateRequest{
+		Recipient: "+1234567890",
+		Channel:   "sms",
+		Content:   &content,
+	}
+
+	// Key not found — proceed with creation
+	repo.On("GetByIdempotencyKey", mock.Anything, key).Return(nil, nil)
+	repo.On("Create", mock.Anything, mock.AnythingOfType("*domain.Notification")).Return(nil)
+
+	result, err := svc.Create(context.Background(), req, &key)
+
+	require.NoError(t, err)
+	assert.NotNil(t, result)
+	assert.Equal(t, key, *result.IdempotencyKey)
+	repo.AssertExpectations(t)
+}
+
+func TestNotificationService_Create_NoContentNoTemplate(t *testing.T) {
+	repo := new(mockNotificationRepository)
+	tmplSvc := new(mockTemplateService)
+	svc := newTestService(repo, tmplSvc)
+
+	req := domain.NotificationCreateRequest{
+		Recipient: "+1234567890",
+		Channel:   "sms",
+		// No Content, no TemplateID
+	}
+
+	repo.On("Create", mock.Anything, mock.AnythingOfType("*domain.Notification")).Return(nil)
+
+	result, err := svc.Create(context.Background(), req, nil)
+
+	require.NoError(t, err)
+	// Content should be empty string
+	assert.Equal(t, "", result.Content)
+	repo.AssertExpectations(t)
+}
+
+// --- CreateBatch ---
 
 func TestNotificationService_CreateBatch(t *testing.T) {
 	repo := new(mockNotificationRepository)
@@ -290,6 +488,160 @@ func TestNotificationService_CreateBatch(t *testing.T) {
 	repo.AssertExpectations(t)
 }
 
+func TestNotificationService_CreateBatch_WithTemplate(t *testing.T) {
+	repo := new(mockNotificationRepository)
+	tmplSvc := new(mockTemplateService)
+	svc := newTestService(repo, tmplSvc)
+
+	templateID := uuid.New()
+	vars1 := map[string]string{"name": "Alice"}
+	vars2 := map[string]string{"name": "Bob"}
+	req := domain.NotificationBatchCreateRequest{
+		Notifications: []domain.NotificationCreateRequest{
+			{Recipient: "alice@example.com", Channel: "email", TemplateID: &templateID, Variables: vars1},
+			{Recipient: "bob@example.com", Channel: "email", TemplateID: &templateID, Variables: vars2},
+		},
+	}
+
+	tmplSvc.On("Render", mock.Anything, templateID, vars1).Return("Hello Alice", nil)
+	tmplSvc.On("Render", mock.Anything, templateID, vars2).Return("Hello Bob", nil)
+	repo.On("CreateBatch", mock.Anything, mock.AnythingOfType("[]*domain.Notification")).Return(nil)
+
+	results, batchID, err := svc.CreateBatch(context.Background(), req)
+
+	require.NoError(t, err)
+	assert.Len(t, results, 2)
+	assert.NotEqual(t, uuid.Nil, batchID)
+	assert.Equal(t, "Hello Alice", results[0].Content)
+	assert.Equal(t, "Hello Bob", results[1].Content)
+	assert.Equal(t, &templateID, results[0].TemplateID)
+	assert.NotNil(t, results[0].TemplateVars)
+	assert.NotNil(t, results[1].TemplateVars)
+
+	tmplSvc.AssertExpectations(t)
+	repo.AssertExpectations(t)
+}
+
+func TestNotificationService_CreateBatch_WithTemplateNilVariables(t *testing.T) {
+	repo := new(mockNotificationRepository)
+	tmplSvc := new(mockTemplateService)
+	svc := newTestService(repo, tmplSvc)
+
+	templateID := uuid.New()
+	req := domain.NotificationBatchCreateRequest{
+		Notifications: []domain.NotificationCreateRequest{
+			{Recipient: "alice@example.com", Channel: "email", TemplateID: &templateID, Variables: nil},
+		},
+	}
+
+	tmplSvc.On("Render", mock.Anything, templateID, (map[string]string)(nil)).Return("Hello default", nil)
+	repo.On("CreateBatch", mock.Anything, mock.AnythingOfType("[]*domain.Notification")).Return(nil)
+
+	results, batchID, err := svc.CreateBatch(context.Background(), req)
+
+	require.NoError(t, err)
+	assert.Len(t, results, 1)
+	assert.NotEqual(t, uuid.Nil, batchID)
+	assert.Equal(t, "Hello default", results[0].Content)
+	assert.Nil(t, results[0].TemplateVars)
+
+	tmplSvc.AssertExpectations(t)
+	repo.AssertExpectations(t)
+}
+
+func TestNotificationService_CreateBatch_TemplateRenderFails(t *testing.T) {
+	repo := new(mockNotificationRepository)
+	tmplSvc := new(mockTemplateService)
+	svc := newTestService(repo, tmplSvc)
+
+	templateID := uuid.New()
+	vars := map[string]string{"name": "Alice"}
+	req := domain.NotificationBatchCreateRequest{
+		Notifications: []domain.NotificationCreateRequest{
+			{Recipient: "alice@example.com", Channel: "email", TemplateID: &templateID, Variables: vars},
+		},
+	}
+
+	renderErr := errors.New("template render failed")
+	tmplSvc.On("Render", mock.Anything, templateID, vars).Return("", renderErr)
+
+	results, batchID, err := svc.CreateBatch(context.Background(), req)
+
+	assert.Nil(t, results)
+	assert.Equal(t, uuid.Nil, batchID)
+	assert.ErrorIs(t, err, renderErr)
+	repo.AssertNotCalled(t, "CreateBatch", mock.Anything, mock.Anything)
+	tmplSvc.AssertExpectations(t)
+}
+
+func TestNotificationService_CreateBatch_RepoError(t *testing.T) {
+	repo := new(mockNotificationRepository)
+	tmplSvc := new(mockTemplateService)
+	svc := newTestService(repo, tmplSvc)
+
+	content := "Hello"
+	req := domain.NotificationBatchCreateRequest{
+		Notifications: []domain.NotificationCreateRequest{
+			{Recipient: "+111", Channel: "sms", Content: &content},
+		},
+	}
+
+	repoErr := errors.New("batch insert failed")
+	repo.On("CreateBatch", mock.Anything, mock.AnythingOfType("[]*domain.Notification")).Return(repoErr)
+
+	results, batchID, err := svc.CreateBatch(context.Background(), req)
+
+	assert.Nil(t, results)
+	assert.Equal(t, uuid.Nil, batchID)
+	assert.ErrorIs(t, err, repoErr)
+	repo.AssertExpectations(t)
+}
+
+func TestNotificationService_CreateBatch_ScheduledAtFuture(t *testing.T) {
+	repo := new(mockNotificationRepository)
+	tmplSvc := new(mockTemplateService)
+	svc := newTestService(repo, tmplSvc)
+
+	content := "Scheduled"
+	futureTime := time.Now().UTC().Add(24 * time.Hour)
+	req := domain.NotificationBatchCreateRequest{
+		Notifications: []domain.NotificationCreateRequest{
+			{Recipient: "+111", Channel: "sms", Content: &content, ScheduledAt: &futureTime},
+		},
+	}
+
+	repo.On("CreateBatch", mock.Anything, mock.AnythingOfType("[]*domain.Notification")).Return(nil)
+
+	results, _, err := svc.CreateBatch(context.Background(), req)
+
+	require.NoError(t, err)
+	assert.Equal(t, domain.NotificationStatusScheduled, results[0].Status)
+	repo.AssertExpectations(t)
+}
+
+func TestNotificationService_CreateBatch_CustomPriority(t *testing.T) {
+	repo := new(mockNotificationRepository)
+	tmplSvc := new(mockTemplateService)
+	svc := newTestService(repo, tmplSvc)
+
+	content := "Hello"
+	req := domain.NotificationBatchCreateRequest{
+		Notifications: []domain.NotificationCreateRequest{
+			{Recipient: "+111", Channel: "sms", Content: &content, Priority: "high"},
+		},
+	}
+
+	repo.On("CreateBatch", mock.Anything, mock.AnythingOfType("[]*domain.Notification")).Return(nil)
+
+	results, _, err := svc.CreateBatch(context.Background(), req)
+
+	require.NoError(t, err)
+	assert.Equal(t, domain.NotificationPriorityHigh, results[0].Priority)
+	repo.AssertExpectations(t)
+}
+
+// --- Cancel ---
+
 func TestNotificationService_Cancel_FromPending(t *testing.T) {
 	repo := new(mockNotificationRepository)
 	tmplSvc := new(mockTemplateService)
@@ -299,6 +651,69 @@ func TestNotificationService_Cancel_FromPending(t *testing.T) {
 	existing := &domain.Notification{
 		ID:     id,
 		Status: domain.NotificationStatusPending,
+	}
+
+	repo.On("GetByID", mock.Anything, id).Return(existing, nil)
+	repo.On("Update", mock.Anything, mock.AnythingOfType("*domain.Notification")).Return(nil)
+
+	result, err := svc.Cancel(context.Background(), id)
+
+	require.NoError(t, err)
+	assert.Equal(t, domain.NotificationStatusCancelled, result.Status)
+	repo.AssertExpectations(t)
+}
+
+func TestNotificationService_Cancel_FromScheduled(t *testing.T) {
+	repo := new(mockNotificationRepository)
+	tmplSvc := new(mockTemplateService)
+	svc := newTestService(repo, tmplSvc)
+
+	id := uuid.New()
+	existing := &domain.Notification{
+		ID:     id,
+		Status: domain.NotificationStatusScheduled,
+	}
+
+	repo.On("GetByID", mock.Anything, id).Return(existing, nil)
+	repo.On("Update", mock.Anything, mock.AnythingOfType("*domain.Notification")).Return(nil)
+
+	result, err := svc.Cancel(context.Background(), id)
+
+	require.NoError(t, err)
+	assert.Equal(t, domain.NotificationStatusCancelled, result.Status)
+	repo.AssertExpectations(t)
+}
+
+func TestNotificationService_Cancel_FromQueued(t *testing.T) {
+	repo := new(mockNotificationRepository)
+	tmplSvc := new(mockTemplateService)
+	svc := newTestService(repo, tmplSvc)
+
+	id := uuid.New()
+	existing := &domain.Notification{
+		ID:     id,
+		Status: domain.NotificationStatusQueued,
+	}
+
+	repo.On("GetByID", mock.Anything, id).Return(existing, nil)
+	repo.On("Update", mock.Anything, mock.AnythingOfType("*domain.Notification")).Return(nil)
+
+	result, err := svc.Cancel(context.Background(), id)
+
+	require.NoError(t, err)
+	assert.Equal(t, domain.NotificationStatusCancelled, result.Status)
+	repo.AssertExpectations(t)
+}
+
+func TestNotificationService_Cancel_FromFailed(t *testing.T) {
+	repo := new(mockNotificationRepository)
+	tmplSvc := new(mockTemplateService)
+	svc := newTestService(repo, tmplSvc)
+
+	id := uuid.New()
+	existing := &domain.Notification{
+		ID:     id,
+		Status: domain.NotificationStatusFailed,
 	}
 
 	repo.On("GetByID", mock.Anything, id).Return(existing, nil)
@@ -371,6 +786,87 @@ func TestNotificationService_Cancel_FromProcessing(t *testing.T) {
 	repo.AssertExpectations(t)
 }
 
+func TestNotificationService_Cancel_FromRetrying(t *testing.T) {
+	repo := new(mockNotificationRepository)
+	tmplSvc := new(mockTemplateService)
+	svc := newTestService(repo, tmplSvc)
+
+	id := uuid.New()
+	existing := &domain.Notification{
+		ID:     id,
+		Status: domain.NotificationStatusRetrying,
+	}
+
+	repo.On("GetByID", mock.Anything, id).Return(existing, nil)
+
+	result, err := svc.Cancel(context.Background(), id)
+
+	assert.Nil(t, result)
+	assert.ErrorIs(t, err, domain.ErrNotificationCancelFailed)
+	repo.AssertExpectations(t)
+}
+
+func TestNotificationService_Cancel_GetByIDFails(t *testing.T) {
+	repo := new(mockNotificationRepository)
+	tmplSvc := new(mockTemplateService)
+	svc := newTestService(repo, tmplSvc)
+
+	id := uuid.New()
+	repo.On("GetByID", mock.Anything, id).Return(nil, domain.ErrNotificationNotFound)
+
+	result, err := svc.Cancel(context.Background(), id)
+
+	assert.Nil(t, result)
+	assert.ErrorIs(t, err, domain.ErrNotificationNotFound)
+	repo.AssertNotCalled(t, "Update", mock.Anything, mock.Anything)
+	repo.AssertExpectations(t)
+}
+
+func TestNotificationService_Cancel_UpdateFails(t *testing.T) {
+	repo := new(mockNotificationRepository)
+	tmplSvc := new(mockTemplateService)
+	svc := newTestService(repo, tmplSvc)
+
+	id := uuid.New()
+	existing := &domain.Notification{
+		ID:     id,
+		Status: domain.NotificationStatusPending,
+	}
+
+	updateErr := errors.New("update failed")
+	repo.On("GetByID", mock.Anything, id).Return(existing, nil)
+	repo.On("Update", mock.Anything, mock.AnythingOfType("*domain.Notification")).Return(updateErr)
+
+	result, err := svc.Cancel(context.Background(), id)
+
+	assert.Nil(t, result)
+	assert.ErrorIs(t, err, updateErr)
+	repo.AssertExpectations(t)
+}
+
+// --- MarkAsProcessing ---
+
+func TestNotificationService_MarkAsProcessing_Success(t *testing.T) {
+	repo := new(mockNotificationRepository)
+	tmplSvc := new(mockTemplateService)
+	svc := newTestService(repo, tmplSvc)
+
+	id := uuid.New()
+	existing := &domain.Notification{
+		ID:     id,
+		Status: domain.NotificationStatusQueued,
+	}
+
+	repo.On("GetForProcessing", mock.Anything, id).Return(existing, nil)
+	repo.On("Update", mock.Anything, mock.AnythingOfType("*domain.Notification")).Return(nil)
+
+	result, err := svc.MarkAsProcessing(context.Background(), id)
+
+	require.NoError(t, err)
+	assert.Equal(t, domain.NotificationStatusProcessing, result.Status)
+	repo.AssertExpectations(t)
+}
+
 func TestNotificationService_MarkAsProcessing_SkipsCancelled(t *testing.T) {
 	repo := new(mockNotificationRepository)
 	tmplSvc := new(mockTemplateService)
@@ -414,7 +910,45 @@ func TestNotificationService_MarkAsProcessing_SkipsSent(t *testing.T) {
 	repo.AssertExpectations(t)
 }
 
-func TestNotificationService_MarkAsProcessing_Success(t *testing.T) {
+func TestNotificationService_MarkAsProcessing_InvalidTransition(t *testing.T) {
+	repo := new(mockNotificationRepository)
+	tmplSvc := new(mockTemplateService)
+	svc := newTestService(repo, tmplSvc)
+
+	id := uuid.New()
+	// "failed" cannot transition directly to "processing"
+	existing := &domain.Notification{
+		ID:     id,
+		Status: domain.NotificationStatusFailed,
+	}
+
+	repo.On("GetForProcessing", mock.Anything, id).Return(existing, nil)
+
+	result, err := svc.MarkAsProcessing(context.Background(), id)
+
+	assert.Nil(t, result)
+	assert.ErrorIs(t, err, domain.ErrNotificationInvalidStatus)
+	repo.AssertNotCalled(t, "Update", mock.Anything, mock.Anything)
+	repo.AssertExpectations(t)
+}
+
+func TestNotificationService_MarkAsProcessing_GetForProcessingFails(t *testing.T) {
+	repo := new(mockNotificationRepository)
+	tmplSvc := new(mockTemplateService)
+	svc := newTestService(repo, tmplSvc)
+
+	id := uuid.New()
+	repo.On("GetForProcessing", mock.Anything, id).Return(nil, domain.ErrNotificationNotFound)
+
+	result, err := svc.MarkAsProcessing(context.Background(), id)
+
+	assert.Nil(t, result)
+	assert.ErrorIs(t, err, domain.ErrNotificationNotFound)
+	repo.AssertNotCalled(t, "Update", mock.Anything, mock.Anything)
+	repo.AssertExpectations(t)
+}
+
+func TestNotificationService_MarkAsProcessing_UpdateFails(t *testing.T) {
 	repo := new(mockNotificationRepository)
 	tmplSvc := new(mockTemplateService)
 	svc := newTestService(repo, tmplSvc)
@@ -423,6 +957,28 @@ func TestNotificationService_MarkAsProcessing_Success(t *testing.T) {
 	existing := &domain.Notification{
 		ID:     id,
 		Status: domain.NotificationStatusQueued,
+	}
+
+	updateErr := errors.New("update failed")
+	repo.On("GetForProcessing", mock.Anything, id).Return(existing, nil)
+	repo.On("Update", mock.Anything, mock.AnythingOfType("*domain.Notification")).Return(updateErr)
+
+	result, err := svc.MarkAsProcessing(context.Background(), id)
+
+	assert.Nil(t, result)
+	assert.ErrorIs(t, err, updateErr)
+	repo.AssertExpectations(t)
+}
+
+func TestNotificationService_MarkAsProcessing_FromRetrying(t *testing.T) {
+	repo := new(mockNotificationRepository)
+	tmplSvc := new(mockTemplateService)
+	svc := newTestService(repo, tmplSvc)
+
+	id := uuid.New()
+	existing := &domain.Notification{
+		ID:     id,
+		Status: domain.NotificationStatusRetrying,
 	}
 
 	repo.On("GetForProcessing", mock.Anything, id).Return(existing, nil)
@@ -434,6 +990,30 @@ func TestNotificationService_MarkAsProcessing_Success(t *testing.T) {
 	assert.Equal(t, domain.NotificationStatusProcessing, result.Status)
 	repo.AssertExpectations(t)
 }
+
+func TestNotificationService_MarkAsProcessing_FromPendingInvalid(t *testing.T) {
+	repo := new(mockNotificationRepository)
+	tmplSvc := new(mockTemplateService)
+	svc := newTestService(repo, tmplSvc)
+
+	id := uuid.New()
+	// "pending" cannot transition to "processing" directly (must go through "queued")
+	existing := &domain.Notification{
+		ID:     id,
+		Status: domain.NotificationStatusPending,
+	}
+
+	repo.On("GetForProcessing", mock.Anything, id).Return(existing, nil)
+
+	result, err := svc.MarkAsProcessing(context.Background(), id)
+
+	assert.Nil(t, result)
+	assert.ErrorIs(t, err, domain.ErrNotificationInvalidStatus)
+	repo.AssertNotCalled(t, "Update", mock.Anything, mock.Anything)
+	repo.AssertExpectations(t)
+}
+
+// --- MarkAsSent ---
 
 func TestNotificationService_MarkAsSent(t *testing.T) {
 	repo := new(mockNotificationRepository)
@@ -459,6 +1039,44 @@ func TestNotificationService_MarkAsSent(t *testing.T) {
 	require.NoError(t, err)
 	repo.AssertExpectations(t)
 }
+
+func TestNotificationService_MarkAsSent_GetByIDFails(t *testing.T) {
+	repo := new(mockNotificationRepository)
+	tmplSvc := new(mockTemplateService)
+	svc := newTestService(repo, tmplSvc)
+
+	id := uuid.New()
+	repo.On("GetByID", mock.Anything, id).Return(nil, domain.ErrNotificationNotFound)
+
+	err := svc.MarkAsSent(context.Background(), id, "provider-123")
+
+	assert.ErrorIs(t, err, domain.ErrNotificationNotFound)
+	repo.AssertNotCalled(t, "Update", mock.Anything, mock.Anything)
+	repo.AssertExpectations(t)
+}
+
+func TestNotificationService_MarkAsSent_UpdateFails(t *testing.T) {
+	repo := new(mockNotificationRepository)
+	tmplSvc := new(mockTemplateService)
+	svc := newTestService(repo, tmplSvc)
+
+	id := uuid.New()
+	existing := &domain.Notification{
+		ID:     id,
+		Status: domain.NotificationStatusProcessing,
+	}
+
+	updateErr := errors.New("update failed")
+	repo.On("GetByID", mock.Anything, id).Return(existing, nil)
+	repo.On("Update", mock.Anything, mock.AnythingOfType("*domain.Notification")).Return(updateErr)
+
+	err := svc.MarkAsSent(context.Background(), id, "provider-123")
+
+	assert.ErrorIs(t, err, updateErr)
+	repo.AssertExpectations(t)
+}
+
+// --- MarkAsFailed ---
 
 func TestNotificationService_MarkAsFailed(t *testing.T) {
 	repo := new(mockNotificationRepository)
@@ -487,6 +1105,104 @@ func TestNotificationService_MarkAsFailed(t *testing.T) {
 	repo.AssertExpectations(t)
 }
 
+func TestNotificationService_MarkAsFailed_GetByIDFails(t *testing.T) {
+	repo := new(mockNotificationRepository)
+	tmplSvc := new(mockTemplateService)
+	svc := newTestService(repo, tmplSvc)
+
+	id := uuid.New()
+	repo.On("GetByID", mock.Anything, id).Return(nil, domain.ErrNotificationNotFound)
+
+	err := svc.MarkAsFailed(context.Background(), id, "reason", 1)
+
+	assert.ErrorIs(t, err, domain.ErrNotificationNotFound)
+	repo.AssertNotCalled(t, "Update", mock.Anything, mock.Anything)
+	repo.AssertExpectations(t)
+}
+
+func TestNotificationService_MarkAsFailed_UpdateFails(t *testing.T) {
+	repo := new(mockNotificationRepository)
+	tmplSvc := new(mockTemplateService)
+	svc := newTestService(repo, tmplSvc)
+
+	id := uuid.New()
+	existing := &domain.Notification{
+		ID:     id,
+		Status: domain.NotificationStatusProcessing,
+	}
+
+	updateErr := errors.New("update failed")
+	repo.On("GetByID", mock.Anything, id).Return(existing, nil)
+	repo.On("Update", mock.Anything, mock.AnythingOfType("*domain.Notification")).Return(updateErr)
+
+	err := svc.MarkAsFailed(context.Background(), id, "reason", 1)
+
+	assert.ErrorIs(t, err, updateErr)
+	repo.AssertExpectations(t)
+}
+
+// --- MarkAsQueued ---
+
+func TestNotificationService_MarkAsQueued(t *testing.T) {
+	repo := new(mockNotificationRepository)
+	tmplSvc := new(mockTemplateService)
+	svc := newTestService(repo, tmplSvc)
+
+	id := uuid.New()
+	existing := &domain.Notification{
+		ID:     id,
+		Status: domain.NotificationStatusPending,
+	}
+
+	repo.On("GetByID", mock.Anything, id).Return(existing, nil)
+	repo.On("Update", mock.Anything, mock.MatchedBy(func(n *domain.Notification) bool {
+		return n.Status == domain.NotificationStatusQueued
+	})).Return(nil)
+
+	err := svc.MarkAsQueued(context.Background(), id)
+
+	require.NoError(t, err)
+	repo.AssertExpectations(t)
+}
+
+func TestNotificationService_MarkAsQueued_GetByIDFails(t *testing.T) {
+	repo := new(mockNotificationRepository)
+	tmplSvc := new(mockTemplateService)
+	svc := newTestService(repo, tmplSvc)
+
+	id := uuid.New()
+	repo.On("GetByID", mock.Anything, id).Return(nil, domain.ErrNotificationNotFound)
+
+	err := svc.MarkAsQueued(context.Background(), id)
+
+	assert.ErrorIs(t, err, domain.ErrNotificationNotFound)
+	repo.AssertNotCalled(t, "Update", mock.Anything, mock.Anything)
+	repo.AssertExpectations(t)
+}
+
+func TestNotificationService_MarkAsQueued_UpdateFails(t *testing.T) {
+	repo := new(mockNotificationRepository)
+	tmplSvc := new(mockTemplateService)
+	svc := newTestService(repo, tmplSvc)
+
+	id := uuid.New()
+	existing := &domain.Notification{
+		ID:     id,
+		Status: domain.NotificationStatusPending,
+	}
+
+	updateErr := errors.New("update failed")
+	repo.On("GetByID", mock.Anything, id).Return(existing, nil)
+	repo.On("Update", mock.Anything, mock.AnythingOfType("*domain.Notification")).Return(updateErr)
+
+	err := svc.MarkAsQueued(context.Background(), id)
+
+	assert.ErrorIs(t, err, updateErr)
+	repo.AssertExpectations(t)
+}
+
+// --- MarkAsRetrying ---
+
 func TestNotificationService_MarkAsRetrying(t *testing.T) {
 	repo := new(mockNotificationRepository)
 	tmplSvc := new(mockTemplateService)
@@ -509,6 +1225,44 @@ func TestNotificationService_MarkAsRetrying(t *testing.T) {
 	repo.AssertExpectations(t)
 }
 
+func TestNotificationService_MarkAsRetrying_GetByIDFails(t *testing.T) {
+	repo := new(mockNotificationRepository)
+	tmplSvc := new(mockTemplateService)
+	svc := newTestService(repo, tmplSvc)
+
+	id := uuid.New()
+	repo.On("GetByID", mock.Anything, id).Return(nil, domain.ErrNotificationNotFound)
+
+	err := svc.MarkAsRetrying(context.Background(), id)
+
+	assert.ErrorIs(t, err, domain.ErrNotificationNotFound)
+	repo.AssertNotCalled(t, "Update", mock.Anything, mock.Anything)
+	repo.AssertExpectations(t)
+}
+
+func TestNotificationService_MarkAsRetrying_UpdateFails(t *testing.T) {
+	repo := new(mockNotificationRepository)
+	tmplSvc := new(mockTemplateService)
+	svc := newTestService(repo, tmplSvc)
+
+	id := uuid.New()
+	existing := &domain.Notification{
+		ID:     id,
+		Status: domain.NotificationStatusFailed,
+	}
+
+	updateErr := errors.New("update failed")
+	repo.On("GetByID", mock.Anything, id).Return(existing, nil)
+	repo.On("Update", mock.Anything, mock.AnythingOfType("*domain.Notification")).Return(updateErr)
+
+	err := svc.MarkAsRetrying(context.Background(), id)
+
+	assert.ErrorIs(t, err, updateErr)
+	repo.AssertExpectations(t)
+}
+
+// --- GetByID ---
+
 func TestNotificationService_GetByID(t *testing.T) {
 	repo := new(mockNotificationRepository)
 	tmplSvc := new(mockTemplateService)
@@ -525,6 +1279,8 @@ func TestNotificationService_GetByID(t *testing.T) {
 	assert.Equal(t, expected, result)
 	repo.AssertExpectations(t)
 }
+
+// --- GetByBatchID ---
 
 func TestNotificationService_GetByBatchID(t *testing.T) {
 	repo := new(mockNotificationRepository)
@@ -546,6 +1302,8 @@ func TestNotificationService_GetByBatchID(t *testing.T) {
 	repo.AssertExpectations(t)
 }
 
+// --- List ---
+
 func TestNotificationService_List(t *testing.T) {
 	repo := new(mockNotificationRepository)
 	tmplSvc := new(mockTemplateService)
@@ -563,4 +1321,3 @@ func TestNotificationService_List(t *testing.T) {
 	assert.Equal(t, int64(1), total)
 	repo.AssertExpectations(t)
 }
-
