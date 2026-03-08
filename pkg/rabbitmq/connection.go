@@ -11,10 +11,6 @@ type RabbitMQConnection interface {
 	Close() error
 }
 
-type RabbitMQConfig struct {
-	URL string
-}
-
 type connection struct {
 	amqpConnection *amqp.Connection
 }

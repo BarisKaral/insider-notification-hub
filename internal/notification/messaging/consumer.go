@@ -25,14 +25,6 @@ type NotificationConsumer interface {
 	Stop() error
 }
 
-// NotificationConsumerConfig holds configuration for the consumer.
-type NotificationConsumerConfig struct {
-	Concurrency int
-	RateLimit   int
-	MaxRetries  int
-	RetryTTL    time.Duration
-}
-
 type notificationConsumer struct {
 	notificationProcessingService service.NotificationProcessingService
 	amqpChannel                   *amqp.Channel
@@ -42,15 +34,6 @@ type notificationConsumer struct {
 }
 
 var _ NotificationConsumer = (*notificationConsumer)(nil)
-
-// consumerPayload mirrors the message format published by the producer.
-type consumerPayload struct {
-	ID        string `json:"id"`
-	Recipient string `json:"recipient"`
-	Channel   string `json:"channel"`
-	Content   string `json:"content"`
-	Priority  string `json:"priority"`
-}
 
 // NewNotificationConsumer creates a new consumer that processes notifications from RabbitMQ.
 func NewNotificationConsumer(

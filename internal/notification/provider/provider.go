@@ -1,33 +1,8 @@
 package provider
 
-import (
-	"context"
-	"time"
-)
+import "context"
 
 // NotificationProvider sends notifications through a specific channel.
 type NotificationProvider interface {
 	Send(ctx context.Context, req *ProviderRequest) (*ProviderResponse, error)
-}
-
-// ProviderRequest is the payload sent to the external notification provider.
-type ProviderRequest struct {
-	To      string `json:"to"`
-	Channel string `json:"channel"`
-	Content string `json:"content"`
-}
-
-// ProviderResponse is the response from the external notification provider.
-type ProviderResponse struct {
-	MessageID string `json:"messageId"`
-	Status    string `json:"status"`
-	Timestamp string `json:"timestamp"`
-}
-
-// ProviderConfig holds shared configuration for all providers.
-type ProviderConfig struct {
-	URL        string
-	AuthKey    string
-	Timeout    time.Duration
-	MaxRetries int
 }

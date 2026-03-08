@@ -18,14 +18,6 @@ type EmailClient struct {
 	baseURL    string
 }
 
-// EmailClientConfig holds configuration for the Email provider client.
-type EmailClientConfig struct {
-	URL        string
-	AuthKey    string
-	Timeout    time.Duration
-	MaxRetries int
-}
-
 // NewEmailClient creates a new Email provider HTTP client.
 func NewEmailClient(config EmailClientConfig) *EmailClient {
 	httpClientConfig := httpclient.HTTPClientConfig{

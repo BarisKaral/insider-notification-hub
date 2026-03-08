@@ -18,14 +18,6 @@ type SMSClient struct {
 	baseURL    string
 }
 
-// SMSClientConfig holds configuration for the SMS provider client.
-type SMSClientConfig struct {
-	URL        string
-	AuthKey    string
-	Timeout    time.Duration
-	MaxRetries int
-}
-
 // NewSMSClient creates a new SMS provider HTTP client.
 func NewSMSClient(config SMSClientConfig) *SMSClient {
 	httpClientConfig := httpclient.HTTPClientConfig{

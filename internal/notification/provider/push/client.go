@@ -18,14 +18,6 @@ type PushClient struct {
 	baseURL    string
 }
 
-// PushClientConfig holds configuration for the Push provider client.
-type PushClientConfig struct {
-	URL        string
-	AuthKey    string
-	Timeout    time.Duration
-	MaxRetries int
-}
-
 // NewPushClient creates a new Push provider HTTP client.
 func NewPushClient(config PushClientConfig) *PushClient {
 	httpClientConfig := httpclient.HTTPClientConfig{
