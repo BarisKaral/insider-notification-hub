@@ -14,7 +14,6 @@ import (
 
 	"github.com/baris/notification-hub/internal/notification/domain"
 	"github.com/baris/notification-hub/internal/notification/metrics"
-	"github.com/baris/notification-hub/internal/notification/provider"
 	"github.com/baris/notification-hub/internal/notification/service"
 	"github.com/baris/notification-hub/internal/notification/ws"
 	"github.com/baris/notification-hub/pkg/logger"
@@ -35,12 +34,11 @@ type NotificationConsumerConfig struct {
 }
 
 type notificationConsumer struct {
-	service   service.NotificationService
-	providers map[domain.NotificationChannel]provider.NotificationProvider
-	channel   *amqp.Channel
-	wsHub     ws.StatusBroadcaster
-	metrics   *metrics.NotificationMetrics
-	config    NotificationConsumerConfig
+	processingService service.NotificationProcessingService
+	channel           *amqp.Channel
+	wsHub             ws.StatusBroadcaster
+	metrics           *metrics.NotificationMetrics
+	config            NotificationConsumerConfig
 }
 
 var _ NotificationConsumer = (*notificationConsumer)(nil)
@@ -56,20 +54,18 @@ type consumerPayload struct {
 
 // NewNotificationConsumer creates a new consumer that processes notifications from RabbitMQ.
 func NewNotificationConsumer(
-	svc service.NotificationService,
-	providers map[domain.NotificationChannel]provider.NotificationProvider,
+	processingSvc service.NotificationProcessingService,
 	ch *amqp.Channel,
 	wsHub ws.StatusBroadcaster,
 	m *metrics.NotificationMetrics,
 	cfg NotificationConsumerConfig,
 ) NotificationConsumer {
 	return &notificationConsumer{
-		service:   svc,
-		providers: providers,
-		channel:   ch,
-		wsHub:     wsHub,
-		metrics:   m,
-		config:    cfg,
+		processingService: processingSvc,
+		channel:           ch,
+		wsHub:             wsHub,
+		metrics:           m,
+		config:            cfg,
 	}
 }
 
@@ -176,47 +172,20 @@ func (c *notificationConsumer) handleMainMessage(ctx context.Context, msg amqp.D
 		attribute.String("notification.channel", channel),
 	)
 
-	n, err := c.service.MarkAsProcessing(ctx, id)
+	n, sent, err := c.processingService.ProcessAndSend(ctx, id)
 	if err != nil {
-		logger.Error().Err(err).Str("notificationID", id.String()).Msg("failed to mark as processing")
+		logger.Error().Err(err).Str("notificationID", id.String()).Msg("failed to process notification")
 		_ = msg.Nack(false, false)
 		return
 	}
 
-	// Skip cancelled or already sent notifications.
-	if n.Status == domain.NotificationStatusCancelled || n.Status == domain.NotificationStatusSent {
+	if !sent {
 		logger.Info().
 			Str("notificationID", id.String()).
 			Str("status", string(n.Status)).
 			Msg("skipping notification, already terminal")
 		_ = msg.Ack(false)
 		return
-	}
-
-	p, ok := c.providers[domain.NotificationChannel(payload.Channel)]
-	if !ok {
-		logger.Error().Str("channel", payload.Channel).Msg("no provider for channel")
-		_ = msg.Nack(false, false)
-		return
-	}
-
-	providerReq := &provider.ProviderRequest{
-		To:      payload.Recipient,
-		Channel: payload.Channel,
-		Content: payload.Content,
-	}
-
-	resp, err := p.Send(ctx, providerReq)
-	if err != nil {
-		logger.Error().Err(err).Str("notificationID", id.String()).Msg("provider send failed")
-		// NACK without requeue — message goes to DLQ via DLX.
-		// DLQ consumer handles retry/failure status transitions.
-		_ = msg.Nack(false, false)
-		return
-	}
-
-	if err := c.service.MarkAsSent(ctx, id, resp.MessageID); err != nil {
-		logger.Error().Err(err).Str("notificationID", id.String()).Msg("failed to mark as sent")
 	}
 
 	if c.metrics != nil {
@@ -230,7 +199,6 @@ func (c *notificationConsumer) handleMainMessage(ctx context.Context, msg amqp.D
 
 	logger.Info().
 		Str("notificationID", id.String()).
-		Str("providerMsgID", resp.MessageID).
 		Msg("notification sent successfully")
 }
 
@@ -298,79 +266,31 @@ func (c *notificationConsumer) handleDLQMessage(ctx context.Context, msg amqp.De
 		}
 	}
 
-	if int(retryCount) < c.config.MaxRetries {
-		if err := c.service.MarkAsRetrying(ctx, id); err != nil {
-			logger.Error().Err(err).Str("notificationID", id.String()).Msg("failed to mark as retrying")
-			_ = msg.Nack(false, false)
-			return
-		}
+	n, err := c.processingService.HandleDeliveryFailure(ctx, id, int(retryCount), c.config.MaxRetries)
+	if err != nil {
+		logger.Error().Err(err).Str("notificationID", id.String()).Msg("failed to handle delivery failure")
+		_ = msg.Nack(false, false)
+		return
+	}
 
-		newRetryCount := retryCount + 1
-
-		headers := amqp.Table{
-			"x-retry-count": newRetryCount,
-		}
-
-		// Forward trace context headers from the original message.
-		if msg.Headers != nil {
-			for _, key := range []string{"traceparent", "tracestate"} {
-				if v, ok := msg.Headers[key]; ok {
-					headers[key] = v
-				}
-			}
-		}
-
-		err := c.channel.PublishWithContext(ctx,
-			"notification.retry.exchange", // exchange
-			channel,                       // routing key
-			false,                         // mandatory
-			false,                         // immediate
-			amqp.Publishing{
-				ContentType:  "application/json",
-				DeliveryMode: amqp.Persistent,
-				Priority:     msg.Priority,
-				MessageId:    msg.MessageId,
-				Body:         msg.Body,
-				Headers:      headers,
-			},
-		)
-		if err != nil {
-			logger.Error().Err(err).
-				Str("notificationID", id.String()).
-				Int32("retryCount", newRetryCount).
-				Msg("failed to publish to retry exchange")
-			_ = msg.Nack(false, false)
-			return
-		}
-
-		_ = msg.Ack(false)
-
-		logger.Info().
-			Str("notificationID", id.String()).
-			Int32("retryCount", newRetryCount).
-			Msg("notification sent to retry queue")
-	} else {
-		if err := c.service.MarkAsFailed(ctx, id, "max retries exceeded", int(retryCount)); err != nil {
-			logger.Error().Err(err).Str("notificationID", id.String()).Msg("failed to mark as permanently failed")
-		}
-
+	if n.Status == domain.NotificationStatusFailed {
 		if c.metrics != nil {
 			c.metrics.IncTotal(channel, string(domain.NotificationStatusFailed))
 		}
-
-		// Fetch the notification to get batch ID for broadcasting.
-		n, fetchErr := c.service.GetByID(ctx, id)
-		if fetchErr == nil {
-			c.broadcastStatus(n, string(domain.NotificationStatusFailed))
-		}
-
-		_ = msg.Ack(false)
+		c.broadcastStatus(n, string(domain.NotificationStatusFailed))
 
 		logger.Info().
 			Str("notificationID", id.String()).
 			Int32("retryCount", retryCount).
 			Msg("notification permanently failed, max retries exceeded")
+	} else {
+		logger.Info().
+			Str("notificationID", id.String()).
+			Int32("retryCount", retryCount+1).
+			Msg("notification sent to retry queue")
 	}
+
+	_ = msg.Ack(false)
 }
 
 func (c *notificationConsumer) broadcastStatus(n *domain.Notification, status string) {
