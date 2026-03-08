@@ -59,7 +59,7 @@ func (c amqpHeaderCarrier) Keys() []string {
 // Publish marshals a notification to JSON and publishes it to the notification exchange
 // with the channel as routing key.
 func (p *notificationProducer) Publish(ctx context.Context, n *domain.Notification) error {
-	ctx, span := otel.Tracer("notification").Start(ctx, "producer.Publish")
+	ctx, span := otel.Tracer("notification-hub").Start(ctx, "producer.Publish")
 	defer span.End()
 
 	payload := messagePayload{

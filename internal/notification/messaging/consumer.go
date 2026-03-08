@@ -10,14 +10,13 @@ import (
 	amqp "github.com/rabbitmq/amqp091-go"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/codes"
 	"golang.org/x/time/rate"
 
 	"github.com/baris/notification-hub/internal/notification/domain"
 	"github.com/baris/notification-hub/internal/notification/metrics"
+	"github.com/baris/notification-hub/internal/notification/provider"
 	"github.com/baris/notification-hub/internal/notification/service"
 	"github.com/baris/notification-hub/internal/notification/ws"
-	"github.com/baris/notification-hub/internal/provider"
 	"github.com/baris/notification-hub/pkg/logger"
 )
 
@@ -36,12 +35,12 @@ type NotificationConsumerConfig struct {
 }
 
 type notificationConsumer struct {
-	service  service.NotificationService
-	provider provider.ProviderClient
-	channel  *amqp.Channel
-	wsHub    ws.StatusBroadcaster
-	metrics  *metrics.NotificationMetrics
-	config   NotificationConsumerConfig
+	service   service.NotificationService
+	providers map[domain.NotificationChannel]provider.NotificationProvider
+	channel   *amqp.Channel
+	wsHub     ws.StatusBroadcaster
+	metrics   *metrics.NotificationMetrics
+	config    NotificationConsumerConfig
 }
 
 var _ NotificationConsumer = (*notificationConsumer)(nil)
@@ -58,19 +57,19 @@ type consumerPayload struct {
 // NewNotificationConsumer creates a new consumer that processes notifications from RabbitMQ.
 func NewNotificationConsumer(
 	svc service.NotificationService,
-	prov provider.ProviderClient,
+	providers map[domain.NotificationChannel]provider.NotificationProvider,
 	ch *amqp.Channel,
 	wsHub ws.StatusBroadcaster,
 	m *metrics.NotificationMetrics,
 	cfg NotificationConsumerConfig,
 ) NotificationConsumer {
 	return &notificationConsumer{
-		service:  svc,
-		provider: prov,
-		channel:  ch,
-		wsHub:    wsHub,
-		metrics:  m,
-		config:   cfg,
+		service:   svc,
+		providers: providers,
+		channel:   ch,
+		wsHub:     wsHub,
+		metrics:   m,
+		config:    cfg,
 	}
 }
 
@@ -153,7 +152,7 @@ func (c *notificationConsumer) handleMainMessage(ctx context.Context, msg amqp.D
 	propagator := otel.GetTextMapPropagator()
 	ctx = propagator.Extract(ctx, amqpHeaderCarrier(msg.Headers))
 
-	ctx, span := otel.Tracer("notification").Start(ctx, "consumer.Process")
+	ctx, span := otel.Tracer("notification-hub").Start(ctx, fmt.Sprintf("consumer.process.%s", channel))
 	defer span.End()
 
 	start := time.Now()
@@ -161,8 +160,6 @@ func (c *notificationConsumer) handleMainMessage(ctx context.Context, msg amqp.D
 	var payload consumerPayload
 	if err := json.Unmarshal(msg.Body, &payload); err != nil {
 		logger.Error().Err(err).Str("channel", channel).Msg("failed to unmarshal message")
-		span.RecordError(err)
-		span.SetStatus(codes.Error, "unmarshal failed")
 		_ = msg.Nack(false, false)
 		return
 	}
@@ -170,8 +167,6 @@ func (c *notificationConsumer) handleMainMessage(ctx context.Context, msg amqp.D
 	id, err := uuid.Parse(payload.ID)
 	if err != nil {
 		logger.Error().Err(err).Str("payloadID", payload.ID).Msg("failed to parse notification ID")
-		span.RecordError(err)
-		span.SetStatus(codes.Error, "invalid notification ID")
 		_ = msg.Nack(false, false)
 		return
 	}
@@ -184,8 +179,6 @@ func (c *notificationConsumer) handleMainMessage(ctx context.Context, msg amqp.D
 	n, err := c.service.MarkAsProcessing(ctx, id)
 	if err != nil {
 		logger.Error().Err(err).Str("notificationID", id.String()).Msg("failed to mark as processing")
-		span.RecordError(err)
-		span.SetStatus(codes.Error, "mark processing failed")
 		_ = msg.Nack(false, false)
 		return
 	}
@@ -200,17 +193,22 @@ func (c *notificationConsumer) handleMainMessage(ctx context.Context, msg amqp.D
 		return
 	}
 
+	p, ok := c.providers[domain.NotificationChannel(payload.Channel)]
+	if !ok {
+		logger.Error().Str("channel", payload.Channel).Msg("no provider for channel")
+		_ = msg.Nack(false, false)
+		return
+	}
+
 	providerReq := &provider.ProviderRequest{
 		To:      payload.Recipient,
 		Channel: payload.Channel,
 		Content: payload.Content,
 	}
 
-	resp, err := c.provider.Send(ctx, providerReq)
+	resp, err := p.Send(ctx, providerReq)
 	if err != nil {
 		logger.Error().Err(err).Str("notificationID", id.String()).Msg("provider send failed")
-		span.RecordError(err)
-		span.SetStatus(codes.Error, "provider send failed")
 		// NACK without requeue — message goes to DLQ via DLX.
 		// DLQ consumer handles retry/failure status transitions.
 		_ = msg.Nack(false, false)

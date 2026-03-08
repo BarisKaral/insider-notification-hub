@@ -18,7 +18,11 @@ import (
 	ntController "github.com/baris/notification-hub/internal/notificationtemplate/controller"
 	ntRepository "github.com/baris/notification-hub/internal/notificationtemplate/repository"
 	ntService "github.com/baris/notification-hub/internal/notificationtemplate/service"
-	"github.com/baris/notification-hub/internal/provider"
+	"github.com/baris/notification-hub/internal/notification/domain"
+	"github.com/baris/notification-hub/internal/notification/provider"
+	"github.com/baris/notification-hub/internal/notification/provider/email"
+	"github.com/baris/notification-hub/internal/notification/provider/push"
+	"github.com/baris/notification-hub/internal/notification/provider/sms"
 	"github.com/baris/notification-hub/pkg/health"
 	"github.com/baris/notification-hub/pkg/logger"
 	"github.com/baris/notification-hub/pkg/postgres"
@@ -45,8 +49,7 @@ type Container struct {
 	TemplateController ntController.NotificationTemplateController
 
 	// Infrastructure
-	ProviderClient provider.ProviderClient
-	HealthService  health.HealthService
+	HealthService health.HealthService
 	HealthController  health.HealthController
 	WSHub          *ws.NotificationHub
 }
@@ -87,20 +90,34 @@ func NewContainer(cfg *config.Config) (*Container, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to create setup channel: %w", err)
 	}
-	if err := rabbitmq.SetupRabbitMQQueues(setupCh); err != nil {
+	if err := messaging.SetupNotificationQueues(setupCh); err != nil {
 		return nil, fmt.Errorf("failed to setup queues: %w", err)
 	}
 	if err := setupCh.Close(); err != nil {
 		logger.Error().Err(err).Msg("failed to close setup channel")
 	}
 
-	// 5. Provider client
-	c.ProviderClient = provider.NewProviderClient(provider.ProviderConfig{
+	// 5. Provider factory
+	providerCfg := provider.ProviderConfig{
 		URL:        cfg.Provider.URL,
 		AuthKey:    cfg.Provider.AuthKey,
 		Timeout:    cfg.Provider.Timeout,
 		MaxRetries: cfg.Provider.MaxRetries,
-	})
+	}
+	providers := map[domain.NotificationChannel]provider.NotificationProvider{
+		domain.NotificationChannelSMS: sms.NewSMSProvider(sms.SMSClientConfig{
+			URL: providerCfg.URL, AuthKey: providerCfg.AuthKey,
+			Timeout: providerCfg.Timeout, MaxRetries: providerCfg.MaxRetries,
+		}),
+		domain.NotificationChannelEmail: email.NewEmailProvider(email.EmailClientConfig{
+			URL: providerCfg.URL, AuthKey: providerCfg.AuthKey,
+			Timeout: providerCfg.Timeout, MaxRetries: providerCfg.MaxRetries,
+		}),
+		domain.NotificationChannelPush: push.NewPushProvider(push.PushClientConfig{
+			URL: providerCfg.URL, AuthKey: providerCfg.AuthKey,
+			Timeout: providerCfg.Timeout, MaxRetries: providerCfg.MaxRetries,
+		}),
+	}
 
 	// 6. Repositories
 	c.NotificationRepo = repository.NewNotificationRepository(db)
@@ -136,7 +153,7 @@ func NewContainer(cfg *config.Config) (*Container, error) {
 	}
 	c.NotificationConsumer = messaging.NewNotificationConsumer(
 		c.NotificationService,
-		c.ProviderClient,
+		providers,
 		consumerCh,
 		c.WSHub,
 		c.NotificationMetrics,

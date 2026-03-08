@@ -7,9 +7,6 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
-	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/codes"
 
 	"github.com/baris/notification-hub/internal/notification/domain"
 	"github.com/baris/notification-hub/internal/notification/service"
@@ -68,8 +65,7 @@ func (h *notificationController) RegisterRoutes(router fiber.Router) {
 // @Failure 500 {object} response.APIResponse
 // @Router /notifications [post]
 func (h *notificationController) Create(c *fiber.Ctx) error {
-	ctx, span := otel.Tracer("notification").Start(c.Context(), "controller.Create")
-	defer span.End()
+	ctx := c.UserContext()
 
 	// Read optional idempotency key header.
 	var idempotencyKey *string
@@ -94,15 +90,11 @@ func (h *notificationController) Create(c *fiber.Ctx) error {
 	// Create notification via service.
 	n, err := h.service.Create(ctx, req, idempotencyKey)
 	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, "failed to create notification")
 		if appErr, ok := err.(*errs.AppError); ok {
 			return response.AppError(c, appErr)
 		}
 		return response.Error(c, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to create notification")
 	}
-
-	span.SetAttributes(attribute.String("notification.id", n.ID.String()))
 
 	// If not scheduled, publish to queue.
 	if n.Status != domain.NotificationStatusScheduled {
@@ -132,8 +124,7 @@ func (h *notificationController) Create(c *fiber.Ctx) error {
 // @Failure 500 {object} response.APIResponse
 // @Router /notifications/batch [post]
 func (h *notificationController) CreateBatch(c *fiber.Ctx) error {
-	ctx, span := otel.Tracer("notification").Start(c.Context(), "controller.CreateBatch")
-	defer span.End()
+	ctx := c.UserContext()
 
 	// Parse request body.
 	var req domain.NotificationBatchCreateRequest
@@ -152,18 +143,11 @@ func (h *notificationController) CreateBatch(c *fiber.Ctx) error {
 	// Create batch via service.
 	notifications, batchID, err := h.service.CreateBatch(ctx, req)
 	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, "failed to create batch")
 		if appErr, ok := err.(*errs.AppError); ok {
 			return response.AppError(c, appErr)
 		}
 		return response.Error(c, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to create batch")
 	}
-
-	span.SetAttributes(
-		attribute.String("batch.id", batchID.String()),
-		attribute.Int("batch.size", len(notifications)),
-	)
 
 	// Filter non-scheduled notifications and publish.
 	var toPublish []*domain.Notification
@@ -210,7 +194,7 @@ func (h *notificationController) GetByID(c *fiber.Ctx) error {
 		return response.Error(c, http.StatusBadRequest, "INVALID_ID", "invalid notification ID")
 	}
 
-	n, err := h.service.GetByID(c.Context(), id)
+	n, err := h.service.GetByID(c.UserContext(), id)
 	if err != nil {
 		if appErr, ok := err.(*errs.AppError); ok {
 			return response.AppError(c, appErr)
@@ -237,7 +221,7 @@ func (h *notificationController) GetByBatchID(c *fiber.Ctx) error {
 		return response.Error(c, http.StatusBadRequest, "INVALID_ID", "invalid batch ID")
 	}
 
-	notifications, err := h.service.GetByBatchID(c.Context(), batchID)
+	notifications, err := h.service.GetByBatchID(c.UserContext(), batchID)
 	if err != nil {
 		if appErr, ok := err.(*errs.AppError); ok {
 			return response.AppError(c, appErr)
@@ -293,7 +277,7 @@ func (h *notificationController) List(c *fiber.Ctx) error {
 
 	filter.Normalize()
 
-	notifications, total, err := h.service.List(c.Context(), filter)
+	notifications, total, err := h.service.List(c.UserContext(), filter)
 	if err != nil {
 		if appErr, ok := err.(*errs.AppError); ok {
 			return response.AppError(c, appErr)
@@ -327,7 +311,7 @@ func (h *notificationController) Cancel(c *fiber.Ctx) error {
 		return response.Error(c, http.StatusBadRequest, "INVALID_ID", "invalid notification ID")
 	}
 
-	n, err := h.service.Cancel(c.Context(), id)
+	n, err := h.service.Cancel(c.UserContext(), id)
 	if err != nil {
 		if appErr, ok := err.(*errs.AppError); ok {
 			return response.AppError(c, appErr)

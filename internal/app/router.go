@@ -2,6 +2,7 @@ package app
 
 import (
 	"github.com/gofiber/adaptor/v2"
+	"github.com/gofiber/contrib/otelfiber/v2"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/websocket/v2"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -18,6 +19,9 @@ func (a *App) setupRouter() {
 	app := fiber.New(fiber.Config{
 		ErrorHandler: globalErrorHandler,
 	})
+
+	// OpenTelemetry middleware — traces ALL HTTP requests automatically.
+	app.Use(otelfiber.Middleware())
 
 	// Middlewares
 	middleware.SetupMiddleware(app)
