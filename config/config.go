@@ -87,7 +87,7 @@ func NewConfig() (*Config, error) {
 			RecoveryInterval: getDuration("WORKER_RECOVERY_INTERVAL", 30*time.Second),
 		},
 		Jaeger: JaegerConfig{
-			Endpoint: getEnv("JAEGER_ENDPOINT", "http://localhost:14268/api/traces"),
+			Endpoint: getEnv("JAEGER_ENDPOINT", "localhost:4318"),
 		},
 	}
 

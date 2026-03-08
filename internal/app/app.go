@@ -6,26 +6,35 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v2"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 
 	"github.com/baris/notification-hub/config"
 	"github.com/baris/notification-hub/pkg/logger"
+	"github.com/baris/notification-hub/pkg/tracer"
 )
 
 // App is the main application struct that holds the DI container and Fiber instance.
 type App struct {
-	container  *Container
-	fiber      *fiber.App
-	cancelFunc context.CancelFunc
+	container      *Container
+	fiber          *fiber.App
+	cancelFunc     context.CancelFunc
+	tracerProvider *sdktrace.TracerProvider
 }
 
 // NewApp creates a new application with all dependencies wired.
 func NewApp(cfg *config.Config) (*App, error) {
+	// Initialise distributed tracing.
+	tp, err := tracer.InitTracer("notification-hub", cfg.Jaeger.Endpoint)
+	if err != nil {
+		logger.Error().Err(err).Msg("failed to init tracer, continuing without tracing")
+	}
+
 	container, err := NewContainer(cfg)
 	if err != nil {
 		return nil, err
 	}
 
-	a := &App{container: container}
+	a := &App{container: container, tracerProvider: tp}
 	a.setupRouter()
 
 	return a, nil
@@ -80,6 +89,15 @@ func (a *App) Shutdown(timeout time.Duration) error {
 	// Stop HTTP server with timeout
 	if err := a.fiber.ShutdownWithTimeout(timeout); err != nil {
 		logger.Error().Err(err).Msg("failed to shutdown fiber")
+	}
+
+	// Shutdown tracer provider to flush pending spans.
+	if a.tracerProvider != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := a.tracerProvider.Shutdown(ctx); err != nil {
+			logger.Error().Err(err).Msg("failed to shutdown tracer provider")
+		}
 	}
 
 	// Close container (stops consumers, closes connections)

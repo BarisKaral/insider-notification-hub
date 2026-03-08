@@ -8,6 +8,9 @@ import (
 
 	"github.com/google/uuid"
 	amqp "github.com/rabbitmq/amqp091-go"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 	"golang.org/x/time/rate"
 
 	"github.com/baris/notification-hub/internal/provider"
@@ -147,11 +150,20 @@ func (c *notificationConsumer) handleMainMessage(ctx context.Context, msg amqp.D
 		return
 	}
 
+	// Extract trace context propagated from the producer via AMQP headers.
+	propagator := otel.GetTextMapPropagator()
+	ctx = propagator.Extract(ctx, amqpHeaderCarrier(msg.Headers))
+
+	ctx, span := otel.Tracer("notification").Start(ctx, "consumer.Process")
+	defer span.End()
+
 	start := time.Now()
 
 	var payload consumerPayload
 	if err := json.Unmarshal(msg.Body, &payload); err != nil {
 		logger.Error().Err(err).Str("channel", channel).Msg("failed to unmarshal message")
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "unmarshal failed")
 		_ = msg.Nack(false, false)
 		return
 	}
@@ -159,13 +171,22 @@ func (c *notificationConsumer) handleMainMessage(ctx context.Context, msg amqp.D
 	id, err := uuid.Parse(payload.ID)
 	if err != nil {
 		logger.Error().Err(err).Str("payloadID", payload.ID).Msg("failed to parse notification ID")
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "invalid notification ID")
 		_ = msg.Nack(false, false)
 		return
 	}
 
+	span.SetAttributes(
+		attribute.String("notification.id", id.String()),
+		attribute.String("notification.channel", channel),
+	)
+
 	n, err := c.service.MarkAsProcessing(ctx, id)
 	if err != nil {
 		logger.Error().Err(err).Str("notificationID", id.String()).Msg("failed to mark as processing")
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "mark processing failed")
 		_ = msg.Nack(false, false)
 		return
 	}
@@ -189,6 +210,8 @@ func (c *notificationConsumer) handleMainMessage(ctx context.Context, msg amqp.D
 	resp, err := c.provider.Send(ctx, providerReq)
 	if err != nil {
 		logger.Error().Err(err).Str("notificationID", id.String()).Msg("provider send failed")
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "provider send failed")
 		// NACK without requeue — message goes to DLQ via DLX.
 		// DLQ consumer handles retry/failure status transitions.
 		_ = msg.Nack(false, false)

@@ -5,11 +5,15 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/gofiber/fiber/v2"
+	"github.com/google/uuid"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+
 	"github.com/baris/notification-hub/pkg/errs"
 	"github.com/baris/notification-hub/pkg/logger"
 	"github.com/baris/notification-hub/pkg/response"
-	"github.com/gofiber/fiber/v2"
-	"github.com/google/uuid"
 )
 
 // NotificationHandler defines the HTTP handler interface for notification endpoints.
@@ -51,6 +55,9 @@ func (h *notificationHandler) RegisterRoutes(router fiber.Router) {
 
 // Create handles POST /notifications.
 func (h *notificationHandler) Create(c *fiber.Ctx) error {
+	ctx, span := otel.Tracer("notification").Start(c.Context(), "handler.Create")
+	defer span.End()
+
 	// Read optional idempotency key header.
 	var idempotencyKey *string
 	if key := c.Get("X-Idempotency-Key"); key != "" {
@@ -72,20 +79,24 @@ func (h *notificationHandler) Create(c *fiber.Ctx) error {
 	}
 
 	// Create notification via service.
-	n, err := h.service.Create(c.Context(), req, idempotencyKey)
+	n, err := h.service.Create(ctx, req, idempotencyKey)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "failed to create notification")
 		if appErr, ok := err.(*errs.AppError); ok {
 			return response.AppError(c, appErr)
 		}
 		return response.Error(c, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to create notification")
 	}
 
+	span.SetAttributes(attribute.String("notification.id", n.ID.String()))
+
 	// If not scheduled, publish to queue.
 	if n.Status != NotificationStatusScheduled {
-		if err := h.producer.Publish(c.Context(), n); err != nil {
+		if err := h.producer.Publish(ctx, n); err != nil {
 			logger.Error().Err(err).Str("notificationID", n.ID.String()).Msg("failed to publish notification")
 		} else {
-			if err := h.service.MarkAsQueued(c.Context(), n.ID); err != nil {
+			if err := h.service.MarkAsQueued(ctx, n.ID); err != nil {
 				logger.Error().Err(err).Str("notificationID", n.ID.String()).Msg("failed to mark notification as queued")
 			} else {
 				n.Status = NotificationStatusQueued
@@ -98,6 +109,9 @@ func (h *notificationHandler) Create(c *fiber.Ctx) error {
 
 // CreateBatch handles POST /notifications/batch.
 func (h *notificationHandler) CreateBatch(c *fiber.Ctx) error {
+	ctx, span := otel.Tracer("notification").Start(c.Context(), "handler.CreateBatch")
+	defer span.End()
+
 	// Parse request body.
 	var req NotificationBatchCreateRequest
 	if err := c.BodyParser(&req); err != nil {
@@ -113,13 +127,20 @@ func (h *notificationHandler) CreateBatch(c *fiber.Ctx) error {
 	}
 
 	// Create batch via service.
-	notifications, batchID, err := h.service.CreateBatch(c.Context(), req)
+	notifications, batchID, err := h.service.CreateBatch(ctx, req)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "failed to create batch")
 		if appErr, ok := err.(*errs.AppError); ok {
 			return response.AppError(c, appErr)
 		}
 		return response.Error(c, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to create batch")
 	}
+
+	span.SetAttributes(
+		attribute.String("batch.id", batchID.String()),
+		attribute.Int("batch.size", len(notifications)),
+	)
 
 	// Filter non-scheduled notifications and publish.
 	var toPublish []*Notification
@@ -130,11 +151,11 @@ func (h *notificationHandler) CreateBatch(c *fiber.Ctx) error {
 	}
 
 	if len(toPublish) > 0 {
-		if err := h.producer.PublishBatch(c.Context(), toPublish); err != nil {
+		if err := h.producer.PublishBatch(ctx, toPublish); err != nil {
 			logger.Error().Err(err).Str("batchID", batchID.String()).Msg("failed to publish batch notifications")
 		} else {
 			for _, n := range toPublish {
-				if err := h.service.MarkAsQueued(c.Context(), n.ID); err != nil {
+				if err := h.service.MarkAsQueued(ctx, n.ID); err != nil {
 					logger.Error().Err(err).Str("notificationID", n.ID.String()).Msg("failed to mark notification as queued")
 				} else {
 					n.Status = NotificationStatusQueued

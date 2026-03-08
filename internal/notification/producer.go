@@ -6,6 +6,8 @@ import (
 	"fmt"
 
 	amqp "github.com/rabbitmq/amqp091-go"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/codes"
 )
 
 // NotificationProducer publishes notifications to RabbitMQ channel-specific queues.
@@ -33,9 +35,36 @@ type messagePayload struct {
 	Priority  string `json:"priority"`
 }
 
+// amqpHeaderCarrier adapts amqp.Table for OpenTelemetry trace context propagation.
+type amqpHeaderCarrier amqp.Table
+
+func (c amqpHeaderCarrier) Get(key string) string {
+	if v, ok := (amqp.Table)(c)[key]; ok {
+		if s, ok := v.(string); ok {
+			return s
+		}
+	}
+	return ""
+}
+
+func (c amqpHeaderCarrier) Set(key, value string) {
+	(amqp.Table)(c)[key] = value
+}
+
+func (c amqpHeaderCarrier) Keys() []string {
+	keys := make([]string, 0, len((amqp.Table)(c)))
+	for k := range (amqp.Table)(c) {
+		keys = append(keys, k)
+	}
+	return keys
+}
+
 // Publish marshals a notification to JSON and publishes it to the notification exchange
 // with the channel as routing key.
 func (p *notificationProducer) Publish(ctx context.Context, n *Notification) error {
+	ctx, span := otel.Tracer("notification").Start(ctx, "producer.Publish")
+	defer span.End()
+
 	payload := messagePayload{
 		ID:        n.ID.String(),
 		Recipient: n.Recipient,
@@ -46,8 +75,17 @@ func (p *notificationProducer) Publish(ctx context.Context, n *Notification) err
 
 	body, err := json.Marshal(payload)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "marshal failed")
 		return fmt.Errorf("failed to marshal notification %s: %w", n.ID, err)
 	}
+
+	headers := amqp.Table{
+		"x-retry-count": int32(0),
+	}
+
+	// Inject trace context into AMQP headers for propagation to consumer.
+	otel.GetTextMapPropagator().Inject(ctx, amqpHeaderCarrier(headers))
 
 	err = p.channel.PublishWithContext(ctx,
 		"notification.exchange", // exchange
@@ -60,12 +98,12 @@ func (p *notificationProducer) Publish(ctx context.Context, n *Notification) err
 			Priority:     n.Priority.ToUint8(),
 			MessageId:    n.ID.String(),
 			Body:         body,
-			Headers: amqp.Table{
-				"x-retry-count": int32(0),
-			},
+			Headers:      headers,
 		},
 	)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "publish failed")
 		return fmt.Errorf("failed to publish notification %s: %w", n.ID, err)
 	}
 

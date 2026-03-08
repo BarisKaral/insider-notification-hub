@@ -48,9 +48,12 @@ services:
 
   jaeger:
     image: jaegertracing/all-in-one:latest
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
     ports:
       - "16686:16686"
       - "14268:14268"
+      - "4318:4318"
 
 volumes:
   postgres_data:
