@@ -35,7 +35,7 @@ func TestPushProvider_Send_SuccessWithValidJSON(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(expectedResponse)
+		_ = json.NewEncoder(w).Encode(expectedResponse)
 	}))
 	defer server.Close()
 
@@ -58,7 +58,7 @@ func TestPushProvider_Send_SuccessWithValidJSON(t *testing.T) {
 func TestPushProvider_Send_SuccessWithInvalidJSON_FallsBackToGenerated(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("not valid json"))
+		_, _ = w.Write([]byte("not valid json"))
 	}))
 	defer server.Close()
 
@@ -88,7 +88,7 @@ func TestPushProvider_Send_SuccessWithEmptyMessageID_FallsBackToGenerated(t *tes
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(emptyIDResponse)
+		_ = json.NewEncoder(w).Encode(emptyIDResponse)
 	}))
 	defer server.Close()
 
@@ -125,7 +125,7 @@ func TestPushProvider_Send_ConnectionError(t *testing.T) {
 func TestPushProvider_Send_ProviderRejected_400(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte(`{"error":"invalid request"}`))
+		_, _ = w.Write([]byte(`{"error":"invalid request"}`))
 	}))
 	defer server.Close()
 
@@ -146,7 +146,7 @@ func TestPushProvider_Send_ProviderRejected_400(t *testing.T) {
 func TestPushProvider_Send_ProviderRejected_500(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte(`{"error":"internal error"}`))
+		_, _ = w.Write([]byte(`{"error":"internal error"}`))
 	}))
 	defer server.Close()
 
@@ -198,7 +198,7 @@ func TestPushProvider_Send_VerifiesRequestHeaders(t *testing.T) {
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(provider.ProviderResponse{
+		_ = json.NewEncoder(w).Encode(provider.ProviderResponse{
 			MessageID: "push-headers",
 			Status:    "accepted",
 			Timestamp: "2026-03-08T10:00:00Z",

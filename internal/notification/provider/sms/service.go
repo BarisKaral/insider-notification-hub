@@ -30,7 +30,7 @@ func (p *SMSProvider) Send(ctx context.Context, request *provider.ProviderReques
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", provider.ErrProviderConnectionFailed, err)
 	}
-	defer response.Body.Close()
+	defer func() { _ = response.Body.Close() }()
 
 	body, err := io.ReadAll(response.Body)
 	if err != nil {

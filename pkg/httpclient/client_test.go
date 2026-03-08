@@ -40,7 +40,7 @@ func TestGet_Success(t *testing.T) {
 	c := NewHTTPClient(newTestConfig())
 	resp, err := c.Get(context.Background(), server.URL, nil)
 	require.NoError(t, err)
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 
@@ -68,7 +68,7 @@ func TestPost_Success(t *testing.T) {
 	c := NewHTTPClient(newTestConfig())
 	resp, err := c.Post(context.Background(), server.URL, map[string]string{"name": "test"}, nil)
 	require.NoError(t, err)
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	assert.Equal(t, http.StatusCreated, resp.StatusCode)
 }
@@ -99,7 +99,7 @@ func TestPost_WithBodyMarshalingComplex(t *testing.T) {
 		Count: 5,
 	}, nil)
 	require.NoError(t, err)
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 }
@@ -126,7 +126,7 @@ func TestDo_RetryOnServerError(t *testing.T) {
 
 	resp, err := c.Get(context.Background(), server.URL, nil)
 	require.NoError(t, err)
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 	assert.Equal(t, int32(3), atomic.LoadInt32(&callCount))
@@ -153,7 +153,7 @@ func TestDo_MaxRetriesExceeded(t *testing.T) {
 	// The code: if response.StatusCode >= 500 && attempt < c.maxRetries
 	// On last attempt (attempt == maxRetries), condition is false, so it returns the 500 response.
 	require.NoError(t, err)
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
 
 	// Total calls: initial + maxRetries = 3
@@ -238,7 +238,7 @@ func TestDo_DefaultHeadersApplied(t *testing.T) {
 
 	resp, err := c.Get(context.Background(), server.URL, nil)
 	require.NoError(t, err)
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 }
@@ -270,7 +270,7 @@ func TestDo_CustomHeadersOverrideDefaults(t *testing.T) {
 
 	resp, err := c.Get(context.Background(), server.URL, customHeaders)
 	require.NoError(t, err)
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 }
@@ -286,7 +286,7 @@ func TestGet_NilBody(t *testing.T) {
 	c := NewHTTPClient(newTestConfig())
 	resp, err := c.Get(context.Background(), server.URL, nil)
 	require.NoError(t, err)
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 }
@@ -301,7 +301,7 @@ func TestDo_ContentTypeHeaderAlwaysSet(t *testing.T) {
 	c := NewHTTPClient(newTestConfig())
 	resp, err := c.Do(context.Background(), http.MethodPut, server.URL, nil, nil)
 	require.NoError(t, err)
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 }
@@ -343,7 +343,7 @@ func TestDo_RetryWithPostBody(t *testing.T) {
 
 	resp, err := c.Post(context.Background(), server.URL, map[string]string{"key": "value"}, nil)
 	require.NoError(t, err)
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 	assert.Equal(t, int32(2), atomic.LoadInt32(&callCount))
@@ -366,7 +366,7 @@ func TestDo_NonRetryable4xxError(t *testing.T) {
 
 	resp, err := c.Get(context.Background(), server.URL, nil)
 	require.NoError(t, err)
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
 	// 4xx errors should not be retried
@@ -388,7 +388,7 @@ func TestDo_NilHeaders(t *testing.T) {
 
 	resp, err := c.Do(context.Background(), http.MethodGet, server.URL, nil, nil)
 	require.NoError(t, err)
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 }

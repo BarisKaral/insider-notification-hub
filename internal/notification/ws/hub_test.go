@@ -74,7 +74,7 @@ func dialWS(t *testing.T, url string) *gorilla.Conn {
 // and decodes it into a NotificationStatusUpdate.
 func readStatusUpdate(t *testing.T, conn *gorilla.Conn) NotificationStatusUpdate {
 	t.Helper()
-	conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	_ = conn.SetReadDeadline(time.Now().Add(2 * time.Second))
 	_, msg, err := conn.ReadMessage()
 	require.NoError(t, err)
 
@@ -251,10 +251,10 @@ func TestNotificationHub_ConcurrentBroadcast_DoesNotPanic(t *testing.T) {
 func TestHandleNotificationWS_SubscribesAndReceivesBroadcast(t *testing.T) {
 	hub := NewNotificationHub()
 	app, addr := startTestServer(t, hub)
-	defer app.Shutdown()
+	defer func() { _ = app.Shutdown() }()
 
 	conn := dialWS(t, addr+"/ws/notifications/notif-100")
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 	// Allow time for the handler to call Subscribe.
 	time.Sleep(100 * time.Millisecond)
 
@@ -270,10 +270,10 @@ func TestHandleNotificationWS_SubscribesAndReceivesBroadcast(t *testing.T) {
 func TestHandleBatchWS_SubscribesAndReceivesBroadcast(t *testing.T) {
 	hub := NewNotificationHub()
 	app, addr := startTestServer(t, hub)
-	defer app.Shutdown()
+	defer func() { _ = app.Shutdown() }()
 
 	conn := dialWS(t, addr+"/ws/notifications/batch/batch-200")
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 	time.Sleep(100 * time.Millisecond)
 
 	batchID := "batch-200"
@@ -288,7 +288,7 @@ func TestHandleBatchWS_SubscribesAndReceivesBroadcast(t *testing.T) {
 func TestHandleNotificationWS_UnsubscribesOnClientClose(t *testing.T) {
 	hub := NewNotificationHub()
 	app, addr := startTestServer(t, hub)
-	defer app.Shutdown()
+	defer func() { _ = app.Shutdown() }()
 
 	conn := dialWS(t, addr+"/ws/notifications/notif-300")
 	time.Sleep(100 * time.Millisecond)
@@ -299,7 +299,7 @@ func TestHandleNotificationWS_UnsubscribesOnClientClose(t *testing.T) {
 	hub.mutex.RUnlock()
 
 	// Close the client connection.
-	conn.Close()
+	_ = conn.Close()
 	// Allow time for the server to detect the disconnect and run Unsubscribe.
 	time.Sleep(200 * time.Millisecond)
 
@@ -313,7 +313,7 @@ func TestHandleNotificationWS_UnsubscribesOnClientClose(t *testing.T) {
 func TestHandleBatchWS_UnsubscribesOnClientClose(t *testing.T) {
 	hub := NewNotificationHub()
 	app, addr := startTestServer(t, hub)
-	defer app.Shutdown()
+	defer func() { _ = app.Shutdown() }()
 
 	conn := dialWS(t, addr+"/ws/notifications/batch/batch-300")
 	time.Sleep(100 * time.Millisecond)
@@ -322,7 +322,7 @@ func TestHandleBatchWS_UnsubscribesOnClientClose(t *testing.T) {
 	assert.Len(t, hub.subscribers["batch-300"], 1)
 	hub.mutex.RUnlock()
 
-	conn.Close()
+	_ = conn.Close()
 	time.Sleep(200 * time.Millisecond)
 
 	hub.mutex.RLock()
@@ -334,14 +334,14 @@ func TestHandleBatchWS_UnsubscribesOnClientClose(t *testing.T) {
 func TestBroadcast_WithBatchID_ReachesBothSubscribers(t *testing.T) {
 	hub := NewNotificationHub()
 	app, addr := startTestServer(t, hub)
-	defer app.Shutdown()
+	defer func() { _ = app.Shutdown() }()
 
 	// One client subscribes to the notification ID.
 	notifConn := dialWS(t, addr+"/ws/notifications/notif-400")
-	defer notifConn.Close()
+	defer func() { _ = notifConn.Close() }()
 	// Another client subscribes to the batch ID.
 	batchConn := dialWS(t, addr+"/ws/notifications/batch/batch-400")
-	defer batchConn.Close()
+	defer func() { _ = batchConn.Close() }()
 	time.Sleep(100 * time.Millisecond)
 
 	batchID := "batch-400"
@@ -360,12 +360,12 @@ func TestBroadcast_WithBatchID_ReachesBothSubscribers(t *testing.T) {
 func TestBroadcast_MultipleSubscribersOnSameKey(t *testing.T) {
 	hub := NewNotificationHub()
 	app, addr := startTestServer(t, hub)
-	defer app.Shutdown()
+	defer func() { _ = app.Shutdown() }()
 
 	conn1 := dialWS(t, addr+"/ws/notifications/notif-500")
-	defer conn1.Close()
+	defer func() { _ = conn1.Close() }()
 	conn2 := dialWS(t, addr+"/ws/notifications/notif-500")
-	defer conn2.Close()
+	defer func() { _ = conn2.Close() }()
 	time.Sleep(100 * time.Millisecond)
 
 	hub.mutex.RLock()
@@ -384,7 +384,7 @@ func TestBroadcast_MultipleSubscribersOnSameKey(t *testing.T) {
 func TestBroadcast_WriteFailed_RemovesSubscriber(t *testing.T) {
 	hub := NewNotificationHub()
 	app, addr := startTestServer(t, hub)
-	defer app.Shutdown()
+	defer func() { _ = app.Shutdown() }()
 
 	conn := dialWS(t, addr+"/ws/notifications/notif-600")
 	time.Sleep(100 * time.Millisecond)
@@ -395,7 +395,7 @@ func TestBroadcast_WriteFailed_RemovesSubscriber(t *testing.T) {
 
 	// Close the underlying TCP connection without a proper WebSocket close.
 	// This will cause WriteMessage to fail on the server side.
-	conn.UnderlyingConn().Close()
+	_ = conn.UnderlyingConn().Close()
 	time.Sleep(100 * time.Millisecond)
 
 	// Broadcast after the client's TCP is dead — WriteMessage should fail
@@ -412,10 +412,10 @@ func TestBroadcast_WriteFailed_RemovesSubscriber(t *testing.T) {
 func TestSubscribe_CreatesNewKeyEntry(t *testing.T) {
 	hub := NewNotificationHub()
 	app, addr := startTestServer(t, hub)
-	defer app.Shutdown()
+	defer func() { _ = app.Shutdown() }()
 
 	conn := dialWS(t, addr+"/ws/notifications/brand-new-key")
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 	time.Sleep(100 * time.Millisecond)
 
 	hub.mutex.RLock()
@@ -429,7 +429,7 @@ func TestSubscribe_CreatesNewKeyEntry(t *testing.T) {
 func TestUnsubscribe_RemovesKeyWhenLastConnectionGone(t *testing.T) {
 	hub := NewNotificationHub()
 	app, addr := startTestServer(t, hub)
-	defer app.Shutdown()
+	defer func() { _ = app.Shutdown() }()
 
 	conn := dialWS(t, addr+"/ws/notifications/single-sub")
 	time.Sleep(100 * time.Millisecond)
@@ -438,7 +438,7 @@ func TestUnsubscribe_RemovesKeyWhenLastConnectionGone(t *testing.T) {
 	assert.Contains(t, hub.subscribers, "single-sub")
 	hub.mutex.RUnlock()
 
-	conn.Close()
+	_ = conn.Close()
 	time.Sleep(200 * time.Millisecond)
 
 	hub.mutex.RLock()
@@ -450,7 +450,7 @@ func TestUnsubscribe_RemovesKeyWhenLastConnectionGone(t *testing.T) {
 func TestUnsubscribe_KeepsKeyWhenOtherConnectionsRemain(t *testing.T) {
 	hub := NewNotificationHub()
 	app, addr := startTestServer(t, hub)
-	defer app.Shutdown()
+	defer func() { _ = app.Shutdown() }()
 
 	conn1 := dialWS(t, addr+"/ws/notifications/multi-sub")
 	conn2 := dialWS(t, addr+"/ws/notifications/multi-sub")
@@ -461,7 +461,7 @@ func TestUnsubscribe_KeepsKeyWhenOtherConnectionsRemain(t *testing.T) {
 	hub.mutex.RUnlock()
 
 	// Close only one connection.
-	conn1.Close()
+	_ = conn1.Close()
 	time.Sleep(200 * time.Millisecond)
 
 	hub.mutex.RLock()
@@ -470,7 +470,7 @@ func TestUnsubscribe_KeepsKeyWhenOtherConnectionsRemain(t *testing.T) {
 	assert.True(t, exists, "key should still exist with one subscriber remaining")
 	assert.Len(t, conns, 1)
 
-	conn2.Close()
+	_ = conn2.Close()
 	time.Sleep(200 * time.Millisecond)
 
 	hub.mutex.RLock()
@@ -482,7 +482,7 @@ func TestUnsubscribe_KeepsKeyWhenOtherConnectionsRemain(t *testing.T) {
 func TestConcurrentSubscribeUnsubscribeBroadcast(t *testing.T) {
 	hub := NewNotificationHub()
 	app, addr := startTestServer(t, hub)
-	defer app.Shutdown()
+	defer func() { _ = app.Shutdown() }()
 
 	var wg sync.WaitGroup
 	const concurrency = 10
@@ -499,7 +499,7 @@ func TestConcurrentSubscribeUnsubscribeBroadcast(t *testing.T) {
 			hub.Broadcast(key, nil, "sent")
 
 			// Read the broadcast message.
-			conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+			_ = conn.SetReadDeadline(time.Now().Add(2 * time.Second))
 			_, msg, err := conn.ReadMessage()
 			if err == nil {
 				var update NotificationStatusUpdate
@@ -507,7 +507,7 @@ func TestConcurrentSubscribeUnsubscribeBroadcast(t *testing.T) {
 				assert.Equal(t, key, update.NotificationID)
 			}
 
-			conn.Close()
+			_ = conn.Close()
 		}(i)
 	}
 
@@ -517,10 +517,10 @@ func TestConcurrentSubscribeUnsubscribeBroadcast(t *testing.T) {
 func TestBroadcast_MultipleBroadcasts_AllReceived(t *testing.T) {
 	hub := NewNotificationHub()
 	app, addr := startTestServer(t, hub)
-	defer app.Shutdown()
+	defer func() { _ = app.Shutdown() }()
 
 	conn := dialWS(t, addr+"/ws/notifications/notif-multi")
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 	time.Sleep(100 * time.Millisecond)
 
 	statuses := []string{"pending", "sent", "delivered"}
@@ -538,11 +538,11 @@ func TestBroadcast_MultipleBroadcasts_AllReceived(t *testing.T) {
 func TestBroadcast_NotificationAndBatchRouting(t *testing.T) {
 	hub := NewNotificationHub()
 	app, addr := startTestServer(t, hub)
-	defer app.Shutdown()
+	defer func() { _ = app.Shutdown() }()
 
 	// Subscribe to notification key only.
 	notifConn := dialWS(t, addr+"/ws/notifications/notif-700")
-	defer notifConn.Close()
+	defer func() { _ = notifConn.Close() }()
 	time.Sleep(100 * time.Millisecond)
 
 	// Broadcast without batchID — only notif subscriber should get it.
@@ -556,11 +556,11 @@ func TestBroadcast_NotificationAndBatchRouting(t *testing.T) {
 func TestUnsubscribe_NonexistentKey_DoesNotPanic(t *testing.T) {
 	hub := NewNotificationHub()
 	app, addr := startTestServer(t, hub)
-	defer app.Shutdown()
+	defer func() { _ = app.Shutdown() }()
 
 	// Connect and subscribe, then manually unsubscribe a nonexistent key.
 	conn := dialWS(t, addr+"/ws/notifications/notif-800")
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 	time.Sleep(100 * time.Millisecond)
 
 	// Unsubscribe a key that was never subscribed. This exercises the
@@ -585,10 +585,10 @@ func TestUnsubscribe_NonexistentKey_DoesNotPanic(t *testing.T) {
 func TestBroadcast_TimestampIsRFC3339(t *testing.T) {
 	hub := NewNotificationHub()
 	app, addr := startTestServer(t, hub)
-	defer app.Shutdown()
+	defer func() { _ = app.Shutdown() }()
 
 	conn := dialWS(t, addr+"/ws/notifications/notif-ts")
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 	time.Sleep(100 * time.Millisecond)
 
 	before := time.Now().UTC()
@@ -606,15 +606,15 @@ func TestBroadcast_TimestampIsRFC3339(t *testing.T) {
 func TestBroadcast_StatusUpdateContainsCorrectFields(t *testing.T) {
 	hub := NewNotificationHub()
 	app, addr := startTestServer(t, hub)
-	defer app.Shutdown()
+	defer func() { _ = app.Shutdown() }()
 
 	conn := dialWS(t, addr+"/ws/notifications/field-check")
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 	time.Sleep(100 * time.Millisecond)
 
 	hub.Broadcast("field-check", nil, "delivered")
 
-	conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	_ = conn.SetReadDeadline(time.Now().Add(2 * time.Second))
 	_, rawMsg, err := conn.ReadMessage()
 	require.NoError(t, err)
 
@@ -631,14 +631,14 @@ func TestBroadcast_StatusUpdateContainsCorrectFields(t *testing.T) {
 func TestHandleNotificationWS_EmptyParam_ClosesConnection(t *testing.T) {
 	hub := NewNotificationHub()
 	app, addr := startTestServer(t, hub)
-	defer app.Shutdown()
+	defer func() { _ = app.Shutdown() }()
 
 	// Connect to the route that has no :id param, so c.Params("id") returns "".
 	conn := dialWS(t, addr+"/ws/empty-notif")
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	// The handler should close the connection immediately. Reading should fail.
-	conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	_ = conn.SetReadDeadline(time.Now().Add(2 * time.Second))
 	_, _, err := conn.ReadMessage()
 	assert.Error(t, err, "connection should be closed by handler when param is empty")
 }
@@ -646,14 +646,14 @@ func TestHandleNotificationWS_EmptyParam_ClosesConnection(t *testing.T) {
 func TestHandleBatchWS_EmptyParam_ClosesConnection(t *testing.T) {
 	hub := NewNotificationHub()
 	app, addr := startTestServer(t, hub)
-	defer app.Shutdown()
+	defer func() { _ = app.Shutdown() }()
 
 	// Connect to the route that has no :batchId param, so c.Params("batchId") returns "".
 	conn := dialWS(t, addr+"/ws/empty-batch")
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	// The handler should close the connection immediately. Reading should fail.
-	conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	_ = conn.SetReadDeadline(time.Now().Add(2 * time.Second))
 	_, _, err := conn.ReadMessage()
 	assert.Error(t, err, "connection should be closed by handler when param is empty")
 }
@@ -661,7 +661,7 @@ func TestHandleBatchWS_EmptyParam_ClosesConnection(t *testing.T) {
 func TestBroadcastToKey_WriteError_RemovesSubscriber(t *testing.T) {
 	hub := NewNotificationHub()
 	app, addr := startTestServer(t, hub)
-	defer app.Shutdown()
+	defer func() { _ = app.Shutdown() }()
 
 	// Connect a client. The handler subscribes it to the key.
 	conn := dialWS(t, addr+"/ws/notifications/write-err")
@@ -682,9 +682,9 @@ func TestBroadcastToKey_WriteError_RemovesSubscriber(t *testing.T) {
 
 	// Close the server-side underlying connection to force a write error
 	// on the next WriteMessage call.
-	_ = serverConn.Conn.Close()
+	_ = serverConn.Close()
 	// Also close our client to stop the read pump from holding the entry.
-	conn.Close()
+	_ = conn.Close()
 	time.Sleep(100 * time.Millisecond)
 
 	// Re-subscribe the now-broken connection manually so we can trigger

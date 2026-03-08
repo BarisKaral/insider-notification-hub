@@ -21,7 +21,7 @@ func handler(w http.ResponseWriter, r *http.Request) {
 	// GET for healthcheck
 	if r.Method == http.MethodGet {
 		w.WriteHeader(http.StatusOK)
-		fmt.Fprintln(w, "ok")
+		_, _ = fmt.Fprintln(w, "ok")
 		return
 	}
 
@@ -38,7 +38,7 @@ func handler(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(resp)
+	_ = json.NewEncoder(w).Encode(resp)
 
 	log.Printf("accepted request from %s %s", r.Method, r.URL.Path)
 }

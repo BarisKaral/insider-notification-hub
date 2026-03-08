@@ -56,7 +56,7 @@ func TestHealthService_Check_AllHealthy(t *testing.T) {
 	db, mockDB := newTestDB(t)
 	defer func() {
 		sqlDB, _ := db.DB()
-		sqlDB.Close()
+		_ = sqlDB.Close()
 	}()
 
 	mockDB.ExpectQuery("SELECT 1").WillReturnRows(sqlmock.NewRows([]string{"1"}).AddRow(1))
@@ -79,7 +79,7 @@ func TestHealthService_Check_DBDown(t *testing.T) {
 	db, mockDB := newTestDB(t)
 	defer func() {
 		sqlDB, _ := db.DB()
-		sqlDB.Close()
+		_ = sqlDB.Close()
 	}()
 
 	mockDB.ExpectQuery("SELECT 1").WillReturnError(assert.AnError)
@@ -102,7 +102,7 @@ func TestHealthService_Check_RabbitMQDown(t *testing.T) {
 	db, mockDB := newTestDB(t)
 	defer func() {
 		sqlDB, _ := db.DB()
-		sqlDB.Close()
+		_ = sqlDB.Close()
 	}()
 
 	mockDB.ExpectQuery("SELECT 1").WillReturnRows(sqlmock.NewRows([]string{"1"}).AddRow(1))
@@ -125,7 +125,7 @@ func TestHealthService_Check_AllDown(t *testing.T) {
 	db, mockDB := newTestDB(t)
 	defer func() {
 		sqlDB, _ := db.DB()
-		sqlDB.Close()
+		_ = sqlDB.Close()
 	}()
 
 	mockDB.ExpectQuery("SELECT 1").WillReturnError(assert.AnError)

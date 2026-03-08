@@ -50,7 +50,7 @@ func (s *healthService) Check(ctx context.Context) HealthResponse {
 		response.Checks["rabbitmq"] = "down"
 	} else {
 		if ch != nil {
-			ch.Close()
+			_ = ch.Close()
 		}
 		response.Checks["rabbitmq"] = "up"
 	}

@@ -30,7 +30,7 @@ func (p *PushProvider) Send(ctx context.Context, request *provider.ProviderReque
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", provider.ErrProviderConnectionFailed, err)
 	}
-	defer response.Body.Close()
+	defer func() { _ = response.Body.Close() }()
 
 	body, err := io.ReadAll(response.Body)
 	if err != nil {

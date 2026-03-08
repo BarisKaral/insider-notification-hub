@@ -10,7 +10,6 @@ import (
 
 func strPtr(s string) *string       { return &s }
 func uuidPtr(u uuid.UUID) *uuid.UUID { return &u }
-func timePtr(t time.Time) *time.Time { return &t }
 
 // --- NotificationCreateRequest Validation Tests ---
 

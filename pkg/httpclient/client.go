@@ -77,7 +77,7 @@ func (c *client) Do(ctx context.Context, method, url string, body interface{}, h
 		}
 
 		if response.StatusCode >= 500 && attempt < c.maxRetries {
-			response.Body.Close()
+			_ = response.Body.Close()
 			lastErr = fmt.Errorf("%w: status %d", ErrHTTPRequestFailed, response.StatusCode)
 			continue
 		}

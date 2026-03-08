@@ -28,7 +28,7 @@ func TestSetupMiddleware_RequestIDHeaderPresent(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/test", nil)
 	resp, err := app.Test(req)
 	require.NoError(t, err)
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 	assert.NotEmpty(t, resp.Header.Get("X-Request-Id"))
@@ -48,7 +48,7 @@ func TestSetupMiddleware_CORSHeadersPresent(t *testing.T) {
 
 	resp, err := app.Test(req)
 	require.NoError(t, err)
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	assert.NotEmpty(t, resp.Header.Get("Access-Control-Allow-Origin"))
 	assert.Equal(t, "*", resp.Header.Get("Access-Control-Allow-Origin"))
@@ -68,7 +68,7 @@ func TestSetupMiddleware_CORSAllowMethods(t *testing.T) {
 
 	resp, err := app.Test(req)
 	require.NoError(t, err)
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	allowMethods := resp.Header.Get("Access-Control-Allow-Methods")
 	assert.Contains(t, allowMethods, "GET")
@@ -94,7 +94,7 @@ func TestSetupMiddleware_CORSAllowHeaders(t *testing.T) {
 
 	resp, err := app.Test(req)
 	require.NoError(t, err)
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	allowHeaders := resp.Header.Get("Access-Control-Allow-Headers")
 	assert.Contains(t, allowHeaders, "X-Idempotency-Key")
@@ -111,7 +111,7 @@ func TestSetupMiddleware_RecoverFromPanic(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/panic", nil)
 	resp, err := app.Test(req)
 	require.NoError(t, err)
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	// Recover middleware should catch the panic and return 500
 	assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
@@ -132,14 +132,14 @@ func TestSetupMiddleware_NormalRequestAfterPanic(t *testing.T) {
 	req1 := httptest.NewRequest(http.MethodGet, "/panic", nil)
 	resp1, err := app.Test(req1)
 	require.NoError(t, err)
-	resp1.Body.Close()
+	_ = resp1.Body.Close()
 	assert.Equal(t, http.StatusInternalServerError, resp1.StatusCode)
 
 	// Normal request should still work
 	req2 := httptest.NewRequest(http.MethodGet, "/ok", nil)
 	resp2, err := app.Test(req2)
 	require.NoError(t, err)
-	defer resp2.Body.Close()
+	defer func() { _ = resp2.Body.Close() }()
 	assert.Equal(t, http.StatusOK, resp2.StatusCode)
 }
 
@@ -155,13 +155,13 @@ func TestSetupMiddleware_RequestIDUniquePerRequest(t *testing.T) {
 	resp1, err := app.Test(req1)
 	require.NoError(t, err)
 	id1 := resp1.Header.Get("X-Request-Id")
-	resp1.Body.Close()
+	_ = resp1.Body.Close()
 
 	req2 := httptest.NewRequest(http.MethodGet, "/test", nil)
 	resp2, err := app.Test(req2)
 	require.NoError(t, err)
 	id2 := resp2.Header.Get("X-Request-Id")
-	resp2.Body.Close()
+	_ = resp2.Body.Close()
 
 	assert.NotEmpty(t, id1)
 	assert.NotEmpty(t, id2)
