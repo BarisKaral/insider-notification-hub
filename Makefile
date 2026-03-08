@@ -19,7 +19,10 @@ test:
 	go test ./... -v -short
 
 test-e2e:
-	go test ./test/e2e/... -v -tags=e2e
+	docker-compose up -d
+	@echo "Waiting for services..."
+	@sleep 10
+	go test ./test/e2e/... -v -tags=e2e -timeout 120s
 
 test-coverage:
 	go test ./... -cover -short -coverprofile=coverage.out
