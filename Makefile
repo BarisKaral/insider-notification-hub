@@ -16,17 +16,17 @@ seed:
 	go run seed/seeder.go
 
 test:
-	GOTMPDIR=$(CURDIR)/tmp go test ./... -v -short
+	go test ./... -v -short
 
 test-e2e:
 	docker-compose up -d
 	@echo "Waiting for services..."
 	@sleep 10
-	GOTMPDIR=$(CURDIR)/tmp go test ./test/e2e/... -v -tags=e2e -timeout 120s
+	go test ./test/e2e/... -v -tags=e2e -timeout 120s
 
 test-coverage:
-	GOTMPDIR=$(CURDIR)/tmp go test ./... -cover -short -coverprofile=coverage.out
-	GOTMPDIR=$(CURDIR)/tmp go tool cover -html=coverage.out -o coverage.html
+	go test ./... -cover -short -coverprofile=coverage.out
+	go tool cover -html=coverage.out -o coverage.html
 
 swagger:
 	swag init -g cmd/api/main.go -o docs
