@@ -11,6 +11,11 @@ import (
 	"github.com/baris/notification-hub/pkg/logger"
 )
 
+// @title Notification Hub API
+// @version 1.0
+// @description Event-driven notification system
+// @host localhost:8080
+// @BasePath /api/v1
 func main() {
 	logger.Init("info")
 

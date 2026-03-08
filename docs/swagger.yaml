@@ -1,0 +1,572 @@
+basePath: /api/v1
+definitions:
+  notification.NotificationBatchCreateRequest:
+    properties:
+      notifications:
+        items:
+          $ref: '#/definitions/notification.NotificationCreateRequest'
+        maxItems: 1000
+        minItems: 1
+        type: array
+    required:
+    - notifications
+    type: object
+  notification.NotificationBatchResponse:
+    properties:
+      batchId:
+        type: string
+      notifications:
+        items:
+          $ref: '#/definitions/notification.NotificationResponse'
+        type: array
+    type: object
+  notification.NotificationCreateRequest:
+    properties:
+      channel:
+        enum:
+        - sms
+        - email
+        - push
+        type: string
+      content:
+        type: string
+      priority:
+        enum:
+        - high
+        - normal
+        - low
+        type: string
+      recipient:
+        type: string
+      scheduledAt:
+        type: string
+      templateId:
+        type: string
+      variables:
+        additionalProperties:
+          type: string
+        type: object
+    required:
+    - channel
+    - recipient
+    type: object
+  notification.NotificationPaginatedResponse:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/notification.NotificationResponse'
+        type: array
+      limit:
+        type: integer
+      offset:
+        type: integer
+      total:
+        type: integer
+    type: object
+  notification.NotificationResponse:
+    properties:
+      batchId:
+        type: string
+      channel:
+        type: string
+      content:
+        type: string
+      createdAt:
+        type: string
+      failedAt:
+        type: string
+      failureReason:
+        type: string
+      id:
+        type: string
+      priority:
+        type: string
+      providerMessageId:
+        type: string
+      recipient:
+        type: string
+      retryCount:
+        type: integer
+      scheduledAt:
+        type: string
+      sentAt:
+        type: string
+      status:
+        type: string
+      templateId:
+        type: string
+    type: object
+  response.APIResponse:
+    properties:
+      data: {}
+      error:
+        $ref: '#/definitions/response.ErrorInfo'
+      success:
+        type: boolean
+    type: object
+  response.ErrorInfo:
+    properties:
+      code:
+        type: string
+      message:
+        type: string
+    type: object
+  template.TemplateCreateRequest:
+    properties:
+      channel:
+        enum:
+        - sms
+        - email
+        - push
+        type: string
+      content:
+        type: string
+      name:
+        type: string
+    required:
+    - channel
+    - content
+    - name
+    type: object
+  template.TemplateResponse:
+    properties:
+      channel:
+        type: string
+      content:
+        type: string
+      createdAt:
+        type: string
+      id:
+        type: string
+      name:
+        type: string
+      updatedAt:
+        type: string
+    type: object
+  template.TemplateUpdateRequest:
+    properties:
+      channel:
+        enum:
+        - sms
+        - email
+        - push
+        type: string
+      content:
+        type: string
+      name:
+        type: string
+    type: object
+host: localhost:8080
+info:
+  contact: {}
+  description: Event-driven notification system
+  title: Notification Hub API
+  version: "1.0"
+paths:
+  /notifications:
+    get:
+      description: List notifications with optional filters for status, channel, and
+        date range.
+      parameters:
+      - description: Filter by status (pending, queued, sent, failed, cancelled)
+        in: query
+        name: status
+        type: string
+      - description: Filter by channel (sms, email, push)
+        in: query
+        name: channel
+        type: string
+      - description: Filter by start date (RFC3339)
+        in: query
+        name: startDate
+        type: string
+      - description: Filter by end date (RFC3339)
+        in: query
+        name: endDate
+        type: string
+      - default: 20
+        description: Number of items per page
+        in: query
+        name: limit
+        type: integer
+      - default: 0
+        description: Number of items to skip
+        in: query
+        name: offset
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.APIResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/notification.NotificationPaginatedResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+      summary: List notifications
+      tags:
+      - Notifications
+    post:
+      consumes:
+      - application/json
+      description: Create a new notification. Either content or templateId with variables
+        must be provided.
+      parameters:
+      - description: Idempotency key for deduplication
+        in: header
+        name: X-Idempotency-Key
+        type: string
+      - description: Notification payload
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/notification.NotificationCreateRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.APIResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/notification.NotificationResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+      summary: Create a notification
+      tags:
+      - Notifications
+  /notifications/{id}:
+    get:
+      description: Retrieve a single notification by its UUID.
+      parameters:
+      - description: Notification ID (UUID)
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.APIResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/notification.NotificationResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+      summary: Get notification by ID
+      tags:
+      - Notifications
+  /notifications/{id}/cancel:
+    patch:
+      description: Cancel a pending or scheduled notification by its UUID.
+      parameters:
+      - description: Notification ID (UUID)
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.APIResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/notification.NotificationResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+      summary: Cancel a notification
+      tags:
+      - Notifications
+  /notifications/batch:
+    post:
+      consumes:
+      - application/json
+      description: Create multiple notifications in a single request (max 1000).
+      parameters:
+      - description: Batch notification payload
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/notification.NotificationBatchCreateRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.APIResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/notification.NotificationBatchResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+      summary: Create batch notifications
+      tags:
+      - Notifications
+  /notifications/batch/{batchId}:
+    get:
+      description: Retrieve all notifications belonging to a specific batch.
+      parameters:
+      - description: Batch ID (UUID)
+        in: path
+        name: batchId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.APIResponse'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/notification.NotificationResponse'
+                  type: array
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+      summary: Get notifications by batch ID
+      tags:
+      - Notifications
+  /templates:
+    get:
+      description: List all templates with pagination.
+      parameters:
+      - default: 20
+        description: Number of items per page
+        in: query
+        name: limit
+        type: integer
+      - default: 0
+        description: Number of items to skip
+        in: query
+        name: offset
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+      summary: List templates
+      tags:
+      - Templates
+    post:
+      consumes:
+      - application/json
+      description: Create a new notification template.
+      parameters:
+      - description: Template payload
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/template.TemplateCreateRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.APIResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/template.TemplateResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+      summary: Create a template
+      tags:
+      - Templates
+  /templates/{id}:
+    delete:
+      description: Delete a template by its UUID.
+      parameters:
+      - description: Template ID (UUID)
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+      summary: Delete a template
+      tags:
+      - Templates
+    get:
+      description: Retrieve a single template by its UUID.
+      parameters:
+      - description: Template ID (UUID)
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.APIResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/template.TemplateResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+      summary: Get template by ID
+      tags:
+      - Templates
+    put:
+      consumes:
+      - application/json
+      description: Update an existing template by its UUID. At least one field must
+        be provided.
+      parameters:
+      - description: Template ID (UUID)
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Template update payload
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/template.TemplateUpdateRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.APIResponse'
+            - properties:
+                data:
+                  $ref: '#/definitions/template.TemplateResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+      summary: Update a template
+      tags:
+      - Templates
+swagger: "2.0"

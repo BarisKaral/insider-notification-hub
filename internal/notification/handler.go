@@ -54,6 +54,17 @@ func (h *notificationHandler) RegisterRoutes(router fiber.Router) {
 }
 
 // Create handles POST /notifications.
+// @Summary Create a notification
+// @Description Create a new notification. Either content or templateId with variables must be provided.
+// @Tags Notifications
+// @Accept json
+// @Produce json
+// @Param X-Idempotency-Key header string false "Idempotency key for deduplication"
+// @Param request body NotificationCreateRequest true "Notification payload"
+// @Success 201 {object} response.APIResponse{data=NotificationResponse}
+// @Failure 400 {object} response.APIResponse
+// @Failure 500 {object} response.APIResponse
+// @Router /notifications [post]
 func (h *notificationHandler) Create(c *fiber.Ctx) error {
 	ctx, span := otel.Tracer("notification").Start(c.Context(), "handler.Create")
 	defer span.End()
@@ -108,6 +119,16 @@ func (h *notificationHandler) Create(c *fiber.Ctx) error {
 }
 
 // CreateBatch handles POST /notifications/batch.
+// @Summary Create batch notifications
+// @Description Create multiple notifications in a single request (max 1000).
+// @Tags Notifications
+// @Accept json
+// @Produce json
+// @Param request body NotificationBatchCreateRequest true "Batch notification payload"
+// @Success 201 {object} response.APIResponse{data=NotificationBatchResponse}
+// @Failure 400 {object} response.APIResponse
+// @Failure 500 {object} response.APIResponse
+// @Router /notifications/batch [post]
 func (h *notificationHandler) CreateBatch(c *fiber.Ctx) error {
 	ctx, span := otel.Tracer("notification").Start(c.Context(), "handler.CreateBatch")
 	defer span.End()
@@ -171,6 +192,16 @@ func (h *notificationHandler) CreateBatch(c *fiber.Ctx) error {
 }
 
 // GetByID handles GET /notifications/:id.
+// @Summary Get notification by ID
+// @Description Retrieve a single notification by its UUID.
+// @Tags Notifications
+// @Produce json
+// @Param id path string true "Notification ID (UUID)"
+// @Success 200 {object} response.APIResponse{data=NotificationResponse}
+// @Failure 400 {object} response.APIResponse
+// @Failure 404 {object} response.APIResponse
+// @Failure 500 {object} response.APIResponse
+// @Router /notifications/{id} [get]
 func (h *notificationHandler) GetByID(c *fiber.Ctx) error {
 	id, err := uuid.Parse(c.Params("id"))
 	if err != nil {
@@ -189,6 +220,15 @@ func (h *notificationHandler) GetByID(c *fiber.Ctx) error {
 }
 
 // GetByBatchID handles GET /notifications/batch/:batchId.
+// @Summary Get notifications by batch ID
+// @Description Retrieve all notifications belonging to a specific batch.
+// @Tags Notifications
+// @Produce json
+// @Param batchId path string true "Batch ID (UUID)"
+// @Success 200 {object} response.APIResponse{data=[]NotificationResponse}
+// @Failure 400 {object} response.APIResponse
+// @Failure 500 {object} response.APIResponse
+// @Router /notifications/batch/{batchId} [get]
 func (h *notificationHandler) GetByBatchID(c *fiber.Ctx) error {
 	batchID, err := uuid.Parse(c.Params("batchId"))
 	if err != nil {
@@ -207,6 +247,20 @@ func (h *notificationHandler) GetByBatchID(c *fiber.Ctx) error {
 }
 
 // List handles GET /notifications.
+// @Summary List notifications
+// @Description List notifications with optional filters for status, channel, and date range.
+// @Tags Notifications
+// @Produce json
+// @Param status query string false "Filter by status (pending, queued, sent, failed, cancelled)"
+// @Param channel query string false "Filter by channel (sms, email, push)"
+// @Param startDate query string false "Filter by start date (RFC3339)"
+// @Param endDate query string false "Filter by end date (RFC3339)"
+// @Param limit query int false "Number of items per page" default(20)
+// @Param offset query int false "Number of items to skip" default(0)
+// @Success 200 {object} response.APIResponse{data=NotificationPaginatedResponse}
+// @Failure 400 {object} response.APIResponse
+// @Failure 500 {object} response.APIResponse
+// @Router /notifications [get]
 func (h *notificationHandler) List(c *fiber.Ctx) error {
 	limit, _ := strconv.Atoi(c.Query("limit", "20"))
 	offset, _ := strconv.Atoi(c.Query("offset", "0"))
@@ -254,6 +308,17 @@ func (h *notificationHandler) List(c *fiber.Ctx) error {
 }
 
 // Cancel handles PATCH /notifications/:id/cancel.
+// @Summary Cancel a notification
+// @Description Cancel a pending or scheduled notification by its UUID.
+// @Tags Notifications
+// @Produce json
+// @Param id path string true "Notification ID (UUID)"
+// @Success 200 {object} response.APIResponse{data=NotificationResponse}
+// @Failure 400 {object} response.APIResponse
+// @Failure 404 {object} response.APIResponse
+// @Failure 409 {object} response.APIResponse
+// @Failure 500 {object} response.APIResponse
+// @Router /notifications/{id}/cancel [patch]
 func (h *notificationHandler) Cancel(c *fiber.Ctx) error {
 	id, err := uuid.Parse(c.Params("id"))
 	if err != nil {

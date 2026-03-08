@@ -38,6 +38,17 @@ func (h *handler) RegisterRoutes(router fiber.Router) {
 	templates.Delete("/:id", h.Delete)
 }
 
+// Create handles POST /templates.
+// @Summary Create a template
+// @Description Create a new notification template.
+// @Tags Templates
+// @Accept json
+// @Produce json
+// @Param request body TemplateCreateRequest true "Template payload"
+// @Success 201 {object} response.APIResponse{data=TemplateResponse}
+// @Failure 400 {object} response.APIResponse
+// @Failure 500 {object} response.APIResponse
+// @Router /templates [post]
 func (h *handler) Create(c *fiber.Ctx) error {
 	var req TemplateCreateRequest
 	if err := c.BodyParser(&req); err != nil {
@@ -62,6 +73,17 @@ func (h *handler) Create(c *fiber.Ctx) error {
 	return response.Success(c, http.StatusCreated, ToTemplateResponse(t))
 }
 
+// GetByID handles GET /templates/:id.
+// @Summary Get template by ID
+// @Description Retrieve a single template by its UUID.
+// @Tags Templates
+// @Produce json
+// @Param id path string true "Template ID (UUID)"
+// @Success 200 {object} response.APIResponse{data=TemplateResponse}
+// @Failure 400 {object} response.APIResponse
+// @Failure 404 {object} response.APIResponse
+// @Failure 500 {object} response.APIResponse
+// @Router /templates/{id} [get]
 func (h *handler) GetByID(c *fiber.Ctx) error {
 	id, err := uuid.Parse(c.Params("id"))
 	if err != nil {
@@ -79,6 +101,16 @@ func (h *handler) GetByID(c *fiber.Ctx) error {
 	return response.Success(c, http.StatusOK, ToTemplateResponse(t))
 }
 
+// List handles GET /templates.
+// @Summary List templates
+// @Description List all templates with pagination.
+// @Tags Templates
+// @Produce json
+// @Param limit query int false "Number of items per page" default(20)
+// @Param offset query int false "Number of items to skip" default(0)
+// @Success 200 {object} response.APIResponse
+// @Failure 500 {object} response.APIResponse
+// @Router /templates [get]
 func (h *handler) List(c *fiber.Ctx) error {
 	limit, _ := strconv.Atoi(c.Query("limit", "20"))
 	offset, _ := strconv.Atoi(c.Query("offset", "0"))
@@ -106,6 +138,19 @@ func (h *handler) List(c *fiber.Ctx) error {
 	})
 }
 
+// Update handles PUT /templates/:id.
+// @Summary Update a template
+// @Description Update an existing template by its UUID. At least one field must be provided.
+// @Tags Templates
+// @Accept json
+// @Produce json
+// @Param id path string true "Template ID (UUID)"
+// @Param request body TemplateUpdateRequest true "Template update payload"
+// @Success 200 {object} response.APIResponse{data=TemplateResponse}
+// @Failure 400 {object} response.APIResponse
+// @Failure 404 {object} response.APIResponse
+// @Failure 500 {object} response.APIResponse
+// @Router /templates/{id} [put]
 func (h *handler) Update(c *fiber.Ctx) error {
 	id, err := uuid.Parse(c.Params("id"))
 	if err != nil {
@@ -135,6 +180,16 @@ func (h *handler) Update(c *fiber.Ctx) error {
 	return response.Success(c, http.StatusOK, ToTemplateResponse(t))
 }
 
+// Delete handles DELETE /templates/:id.
+// @Summary Delete a template
+// @Description Delete a template by its UUID.
+// @Tags Templates
+// @Param id path string true "Template ID (UUID)"
+// @Success 204 "No Content"
+// @Failure 400 {object} response.APIResponse
+// @Failure 404 {object} response.APIResponse
+// @Failure 500 {object} response.APIResponse
+// @Router /templates/{id} [delete]
 func (h *handler) Delete(c *fiber.Ctx) error {
 	id, err := uuid.Parse(c.Params("id"))
 	if err != nil {

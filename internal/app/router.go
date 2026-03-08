@@ -5,7 +5,9 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/websocket/v2"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	fiberSwagger "github.com/swaggo/fiber-swagger"
 
+	_ "github.com/baris/notification-hub/docs"
 	"github.com/baris/notification-hub/pkg/errs"
 	"github.com/baris/notification-hub/pkg/middleware"
 	"github.com/baris/notification-hub/pkg/response"
@@ -25,6 +27,9 @@ func (a *App) setupRouter() {
 
 	// Metrics
 	app.Get("/metrics", adaptor.HTTPHandler(promhttp.Handler()))
+
+	// Swagger
+	app.Get("/swagger/*", fiberSwagger.WrapHandler)
 
 	// WebSocket — upgrade middleware, then handlers
 	app.Use("/ws", func(c *fiber.Ctx) error {
