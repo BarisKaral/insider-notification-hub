@@ -9,7 +9,13 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/baris/notification-hub/config"
-	"github.com/baris/notification-hub/internal/notification"
+	"github.com/baris/notification-hub/internal/notification/controller"
+	"github.com/baris/notification-hub/internal/notification/domain"
+	"github.com/baris/notification-hub/internal/notification/messaging"
+	"github.com/baris/notification-hub/internal/notification/metrics"
+	"github.com/baris/notification-hub/internal/notification/repository"
+	"github.com/baris/notification-hub/internal/notification/service"
+	"github.com/baris/notification-hub/internal/notification/ws"
 	"github.com/baris/notification-hub/internal/notificationtemplate"
 	"github.com/baris/notification-hub/internal/provider"
 	"github.com/baris/notification-hub/pkg/health"
@@ -25,12 +31,12 @@ type Container struct {
 	RabbitMQ rabbitmq.RabbitMQConnection
 
 	// Notification domain
-	NotificationRepo     notification.NotificationRepository
-	NotificationService  notification.NotificationService
-	NotificationProducer notification.NotificationProducer
-	NotificationConsumer notification.NotificationConsumer
-	NotificationController  notification.NotificationController
-	NotificationMetrics  *notification.NotificationMetrics
+	NotificationRepo       domain.NotificationRepository
+	NotificationService    domain.NotificationService
+	NotificationProducer   domain.NotificationProducer
+	NotificationConsumer   messaging.NotificationConsumer
+	NotificationController controller.NotificationController
+	NotificationMetrics    *metrics.NotificationMetrics
 
 	// Template domain
 	TemplateRepo    notificationtemplate.NotificationTemplateRepository
@@ -41,7 +47,7 @@ type Container struct {
 	ProviderClient provider.ProviderClient
 	HealthService  health.HealthService
 	HealthController  health.HealthController
-	WSHub          *notification.NotificationHub
+	WSHub          *ws.NotificationHub
 }
 
 // NewContainer creates and wires all application dependencies.
@@ -96,7 +102,7 @@ func NewContainer(cfg *config.Config) (*Container, error) {
 	})
 
 	// 6. Repositories
-	c.NotificationRepo = notification.NewNotificationRepository(db)
+	c.NotificationRepo = repository.NewNotificationRepository(db)
 	c.TemplateRepo = notificationtemplate.NewNotificationTemplateRepository(db)
 
 	// 7. Producer (needs AMQP channel)
@@ -104,30 +110,30 @@ func NewContainer(cfg *config.Config) (*Container, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to create producer channel: %w", err)
 	}
-	c.NotificationProducer = notification.NewNotificationProducer(producerCh)
+	c.NotificationProducer = messaging.NewNotificationProducer(producerCh)
 
 	// 8. Services
 	c.TemplateService = notificationtemplate.NewNotificationTemplateService(c.TemplateRepo)
-	c.NotificationService = notification.NewNotificationService(c.NotificationRepo, c.TemplateService, c.NotificationProducer)
+	c.NotificationService = service.NewNotificationService(c.NotificationRepo, c.TemplateService, c.NotificationProducer)
 
 	// 9. WebSocket Hub
-	c.WSHub = notification.NewNotificationHub()
+	c.WSHub = ws.NewNotificationHub()
 
 	// 10. Metrics
-	c.NotificationMetrics = notification.NewNotificationMetrics()
+	c.NotificationMetrics = metrics.NewNotificationMetrics()
 
 	// 11. Consumer (needs AMQP channel)
 	consumerCh, err := rmqConn.Channel()
 	if err != nil {
 		return nil, fmt.Errorf("failed to create consumer channel: %w", err)
 	}
-	consumerCfg := notification.NotificationConsumerConfig{
+	consumerCfg := messaging.NotificationConsumerConfig{
 		Concurrency: cfg.Worker.Concurrency,
 		RateLimit:   cfg.Worker.RateLimit,
 		MaxRetries:  cfg.Worker.MaxRetries,
 		RetryTTL:    cfg.Worker.RetryTTL,
 	}
-	c.NotificationConsumer = notification.NewNotificationConsumer(
+	c.NotificationConsumer = messaging.NewNotificationConsumer(
 		c.NotificationService,
 		c.ProviderClient,
 		consumerCh,
@@ -137,7 +143,7 @@ func NewContainer(cfg *config.Config) (*Container, error) {
 	)
 
 	// 12. Controllers
-	c.NotificationController = notification.NewNotificationController(c.NotificationService, c.NotificationProducer)
+	c.NotificationController = controller.NewNotificationController(c.NotificationService, c.NotificationProducer)
 	c.TemplateController = notificationtemplate.NewNotificationTemplateController(c.TemplateService)
 
 	// 13. Health check

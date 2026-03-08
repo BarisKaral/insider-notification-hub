@@ -1,4 +1,4 @@
-package notification
+package messaging
 
 import (
 	"context"
@@ -13,14 +13,11 @@ import (
 	"go.opentelemetry.io/otel/codes"
 	"golang.org/x/time/rate"
 
+	"github.com/baris/notification-hub/internal/notification/domain"
+	"github.com/baris/notification-hub/internal/notification/metrics"
 	"github.com/baris/notification-hub/internal/provider"
 	"github.com/baris/notification-hub/pkg/logger"
 )
-
-// StatusBroadcaster broadcasts notification status changes (implemented by WebSocket hub).
-type StatusBroadcaster interface {
-	Broadcast(notificationID string, batchID *string, status string)
-}
 
 // NotificationConsumer processes notifications from RabbitMQ queues.
 type NotificationConsumer interface {
@@ -37,11 +34,11 @@ type NotificationConsumerConfig struct {
 }
 
 type notificationConsumer struct {
-	service  NotificationService
+	service  domain.NotificationService
 	provider provider.ProviderClient
 	channel  *amqp.Channel
-	wsHub    StatusBroadcaster
-	metrics  *NotificationMetrics
+	wsHub    domain.StatusBroadcaster
+	metrics  *metrics.NotificationMetrics
 	config   NotificationConsumerConfig
 }
 
@@ -58,11 +55,11 @@ type consumerPayload struct {
 
 // NewNotificationConsumer creates a new consumer that processes notifications from RabbitMQ.
 func NewNotificationConsumer(
-	service NotificationService,
+	service domain.NotificationService,
 	prov provider.ProviderClient,
 	ch *amqp.Channel,
-	wsHub StatusBroadcaster,
-	metrics *NotificationMetrics,
+	wsHub domain.StatusBroadcaster,
+	m *metrics.NotificationMetrics,
 	cfg NotificationConsumerConfig,
 ) NotificationConsumer {
 	return &notificationConsumer{
@@ -70,7 +67,7 @@ func NewNotificationConsumer(
 		provider: prov,
 		channel:  ch,
 		wsHub:    wsHub,
-		metrics:  metrics,
+		metrics:  m,
 		config:   cfg,
 	}
 }
@@ -192,7 +189,7 @@ func (c *notificationConsumer) handleMainMessage(ctx context.Context, msg amqp.D
 	}
 
 	// Skip cancelled or already sent notifications.
-	if n.Status == NotificationStatusCancelled || n.Status == NotificationStatusSent {
+	if n.Status == domain.NotificationStatusCancelled || n.Status == domain.NotificationStatusSent {
 		logger.Info().
 			Str("notificationID", id.String()).
 			Str("status", string(n.Status)).
@@ -223,11 +220,11 @@ func (c *notificationConsumer) handleMainMessage(ctx context.Context, msg amqp.D
 	}
 
 	if c.metrics != nil {
-		c.metrics.IncTotal(channel, string(NotificationStatusSent))
+		c.metrics.IncTotal(channel, string(domain.NotificationStatusSent))
 		c.metrics.ObserveDuration(channel, time.Since(start))
 	}
 
-	c.broadcastStatus(n, string(NotificationStatusSent))
+	c.broadcastStatus(n, string(domain.NotificationStatusSent))
 
 	_ = msg.Ack(false)
 
@@ -358,13 +355,13 @@ func (c *notificationConsumer) handleDLQMessage(ctx context.Context, msg amqp.De
 		}
 
 		if c.metrics != nil {
-			c.metrics.IncTotal(channel, string(NotificationStatusFailed))
+			c.metrics.IncTotal(channel, string(domain.NotificationStatusFailed))
 		}
 
 		// Fetch the notification to get batch ID for broadcasting.
 		n, fetchErr := c.service.GetByID(ctx, id)
 		if fetchErr == nil {
-			c.broadcastStatus(n, string(NotificationStatusFailed))
+			c.broadcastStatus(n, string(domain.NotificationStatusFailed))
 		}
 
 		_ = msg.Ack(false)
@@ -376,7 +373,7 @@ func (c *notificationConsumer) handleDLQMessage(ctx context.Context, msg amqp.De
 	}
 }
 
-func (c *notificationConsumer) broadcastStatus(n *Notification, status string) {
+func (c *notificationConsumer) broadcastStatus(n *domain.Notification, status string) {
 	if c.wsHub == nil {
 		return
 	}

@@ -1,4 +1,4 @@
-package notification
+package controller
 
 import (
 	"net/http"
@@ -11,6 +11,7 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 
+	"github.com/baris/notification-hub/internal/notification/domain"
 	"github.com/baris/notification-hub/pkg/errs"
 	"github.com/baris/notification-hub/pkg/logger"
 	"github.com/baris/notification-hub/pkg/response"
@@ -28,14 +29,14 @@ type NotificationController interface {
 }
 
 type notificationController struct {
-	service  NotificationService
-	producer NotificationProducer
+	service  domain.NotificationService
+	producer domain.NotificationProducer
 }
 
 var _ NotificationController = (*notificationController)(nil)
 
 // NewNotificationController creates a new NotificationController.
-func NewNotificationController(service NotificationService, producer NotificationProducer) NotificationController {
+func NewNotificationController(service domain.NotificationService, producer domain.NotificationProducer) NotificationController {
 	return &notificationController{
 		service:  service,
 		producer: producer,
@@ -60,8 +61,8 @@ func (h *notificationController) RegisterRoutes(router fiber.Router) {
 // @Accept json
 // @Produce json
 // @Param X-Idempotency-Key header string false "Idempotency key for deduplication"
-// @Param request body NotificationCreateRequest true "Notification payload"
-// @Success 201 {object} response.APIResponse{data=NotificationResponse}
+// @Param request body domain.NotificationCreateRequest true "Notification payload"
+// @Success 201 {object} response.APIResponse{data=domain.NotificationResponse}
 // @Failure 400 {object} response.APIResponse
 // @Failure 500 {object} response.APIResponse
 // @Router /notifications [post]
@@ -76,7 +77,7 @@ func (h *notificationController) Create(c *fiber.Ctx) error {
 	}
 
 	// Parse request body.
-	var req NotificationCreateRequest
+	var req domain.NotificationCreateRequest
 	if err := c.BodyParser(&req); err != nil {
 		return response.Error(c, http.StatusBadRequest, "INVALID_BODY", "invalid request body")
 	}
@@ -103,19 +104,19 @@ func (h *notificationController) Create(c *fiber.Ctx) error {
 	span.SetAttributes(attribute.String("notification.id", n.ID.String()))
 
 	// If not scheduled, publish to queue.
-	if n.Status != NotificationStatusScheduled {
+	if n.Status != domain.NotificationStatusScheduled {
 		if err := h.producer.Publish(ctx, n); err != nil {
 			logger.Error().Err(err).Str("notificationID", n.ID.String()).Msg("failed to publish notification")
 		} else {
 			if err := h.service.MarkAsQueued(ctx, n.ID); err != nil {
 				logger.Error().Err(err).Str("notificationID", n.ID.String()).Msg("failed to mark notification as queued")
 			} else {
-				n.Status = NotificationStatusQueued
+				n.Status = domain.NotificationStatusQueued
 			}
 		}
 	}
 
-	return response.Success(c, http.StatusCreated, ToNotificationResponse(n))
+	return response.Success(c, http.StatusCreated, domain.ToNotificationResponse(n))
 }
 
 // CreateBatch handles POST /notifications/batch.
@@ -124,8 +125,8 @@ func (h *notificationController) Create(c *fiber.Ctx) error {
 // @Tags Notifications
 // @Accept json
 // @Produce json
-// @Param request body NotificationBatchCreateRequest true "Batch notification payload"
-// @Success 201 {object} response.APIResponse{data=NotificationBatchResponse}
+// @Param request body domain.NotificationBatchCreateRequest true "Batch notification payload"
+// @Success 201 {object} response.APIResponse{data=domain.NotificationBatchResponse}
 // @Failure 400 {object} response.APIResponse
 // @Failure 500 {object} response.APIResponse
 // @Router /notifications/batch [post]
@@ -134,7 +135,7 @@ func (h *notificationController) CreateBatch(c *fiber.Ctx) error {
 	defer span.End()
 
 	// Parse request body.
-	var req NotificationBatchCreateRequest
+	var req domain.NotificationBatchCreateRequest
 	if err := c.BodyParser(&req); err != nil {
 		return response.Error(c, http.StatusBadRequest, "INVALID_BODY", "invalid request body")
 	}
@@ -164,9 +165,9 @@ func (h *notificationController) CreateBatch(c *fiber.Ctx) error {
 	)
 
 	// Filter non-scheduled notifications and publish.
-	var toPublish []*Notification
+	var toPublish []*domain.Notification
 	for _, n := range notifications {
-		if n.Status != NotificationStatusScheduled {
+		if n.Status != domain.NotificationStatusScheduled {
 			toPublish = append(toPublish, n)
 		}
 	}
@@ -179,15 +180,15 @@ func (h *notificationController) CreateBatch(c *fiber.Ctx) error {
 				if err := h.service.MarkAsQueued(ctx, n.ID); err != nil {
 					logger.Error().Err(err).Str("notificationID", n.ID.String()).Msg("failed to mark notification as queued")
 				} else {
-					n.Status = NotificationStatusQueued
+					n.Status = domain.NotificationStatusQueued
 				}
 			}
 		}
 	}
 
-	return response.Success(c, http.StatusCreated, NotificationBatchResponse{
+	return response.Success(c, http.StatusCreated, domain.NotificationBatchResponse{
 		BatchID:       batchID,
-		Notifications: ToNotificationResponseList(notifications),
+		Notifications: domain.ToNotificationResponseList(notifications),
 	})
 }
 
@@ -197,7 +198,7 @@ func (h *notificationController) CreateBatch(c *fiber.Ctx) error {
 // @Tags Notifications
 // @Produce json
 // @Param id path string true "Notification ID (UUID)"
-// @Success 200 {object} response.APIResponse{data=NotificationResponse}
+// @Success 200 {object} response.APIResponse{data=domain.NotificationResponse}
 // @Failure 400 {object} response.APIResponse
 // @Failure 404 {object} response.APIResponse
 // @Failure 500 {object} response.APIResponse
@@ -216,7 +217,7 @@ func (h *notificationController) GetByID(c *fiber.Ctx) error {
 		return response.Error(c, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to get notification")
 	}
 
-	return response.Success(c, http.StatusOK, ToNotificationResponse(n))
+	return response.Success(c, http.StatusOK, domain.ToNotificationResponse(n))
 }
 
 // GetByBatchID handles GET /notifications/batch/:batchId.
@@ -225,7 +226,7 @@ func (h *notificationController) GetByID(c *fiber.Ctx) error {
 // @Tags Notifications
 // @Produce json
 // @Param batchId path string true "Batch ID (UUID)"
-// @Success 200 {object} response.APIResponse{data=[]NotificationResponse}
+// @Success 200 {object} response.APIResponse{data=[]domain.NotificationResponse}
 // @Failure 400 {object} response.APIResponse
 // @Failure 500 {object} response.APIResponse
 // @Router /notifications/batch/{batchId} [get]
@@ -243,7 +244,7 @@ func (h *notificationController) GetByBatchID(c *fiber.Ctx) error {
 		return response.Error(c, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to get batch notifications")
 	}
 
-	return response.Success(c, http.StatusOK, ToNotificationResponseList(notifications))
+	return response.Success(c, http.StatusOK, domain.ToNotificationResponseList(notifications))
 }
 
 // List handles GET /notifications.
@@ -257,7 +258,7 @@ func (h *notificationController) GetByBatchID(c *fiber.Ctx) error {
 // @Param endDate query string false "Filter by end date (RFC3339)"
 // @Param limit query int false "Number of items per page" default(20)
 // @Param offset query int false "Number of items to skip" default(0)
-// @Success 200 {object} response.APIResponse{data=NotificationPaginatedResponse}
+// @Success 200 {object} response.APIResponse{data=domain.NotificationPaginatedResponse}
 // @Failure 400 {object} response.APIResponse
 // @Failure 500 {object} response.APIResponse
 // @Router /notifications [get]
@@ -265,7 +266,7 @@ func (h *notificationController) List(c *fiber.Ctx) error {
 	limit, _ := strconv.Atoi(c.Query("limit", "20"))
 	offset, _ := strconv.Atoi(c.Query("offset", "0"))
 
-	filter := NotificationListFilter{
+	filter := domain.NotificationListFilter{
 		Status:  c.Query("status"),
 		Channel: c.Query("channel"),
 		Limit:   limit,
@@ -299,8 +300,8 @@ func (h *notificationController) List(c *fiber.Ctx) error {
 		return response.Error(c, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to list notifications")
 	}
 
-	return response.Success(c, http.StatusOK, NotificationPaginatedResponse{
-		Items:  ToNotificationResponseList(notifications),
+	return response.Success(c, http.StatusOK, domain.NotificationPaginatedResponse{
+		Items:  domain.ToNotificationResponseList(notifications),
 		Total:  total,
 		Limit:  filter.Limit,
 		Offset: filter.Offset,
@@ -313,7 +314,7 @@ func (h *notificationController) List(c *fiber.Ctx) error {
 // @Tags Notifications
 // @Produce json
 // @Param id path string true "Notification ID (UUID)"
-// @Success 200 {object} response.APIResponse{data=NotificationResponse}
+// @Success 200 {object} response.APIResponse{data=domain.NotificationResponse}
 // @Failure 400 {object} response.APIResponse
 // @Failure 404 {object} response.APIResponse
 // @Failure 409 {object} response.APIResponse
@@ -333,5 +334,5 @@ func (h *notificationController) Cancel(c *fiber.Ctx) error {
 		return response.Error(c, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to cancel notification")
 	}
 
-	return response.Success(c, http.StatusOK, ToNotificationResponse(n))
+	return response.Success(c, http.StatusOK, domain.ToNotificationResponse(n))
 }

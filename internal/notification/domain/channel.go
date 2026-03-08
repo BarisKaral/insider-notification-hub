@@ -1,4 +1,4 @@
-package notification
+package domain
 
 type NotificationChannel string
 

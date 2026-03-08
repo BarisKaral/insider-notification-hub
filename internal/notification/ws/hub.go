@@ -1,4 +1,4 @@
-package notification
+package ws
 
 import (
 	"encoding/json"
@@ -7,11 +7,12 @@ import (
 
 	"github.com/gofiber/websocket/v2"
 
+	"github.com/baris/notification-hub/internal/notification/domain"
 	"github.com/baris/notification-hub/pkg/logger"
 )
 
 // Compile-time check: NotificationHub must implement StatusBroadcaster.
-var _ StatusBroadcaster = (*NotificationHub)(nil)
+var _ domain.StatusBroadcaster = (*NotificationHub)(nil)
 
 // NotificationHub is the in-memory WebSocket hub for real-time notification status updates.
 type NotificationHub struct {

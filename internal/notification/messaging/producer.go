@@ -1,4 +1,4 @@
-package notification
+package messaging
 
 import (
 	"context"
@@ -8,22 +8,18 @@ import (
 	amqp "github.com/rabbitmq/amqp091-go"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/codes"
-)
 
-// NotificationProducer publishes notifications to RabbitMQ channel-specific queues.
-type NotificationProducer interface {
-	Publish(ctx context.Context, n *Notification) error
-	PublishBatch(ctx context.Context, notifications []*Notification) error
-}
+	"github.com/baris/notification-hub/internal/notification/domain"
+)
 
 type notificationProducer struct {
 	channel *amqp.Channel
 }
 
-var _ NotificationProducer = (*notificationProducer)(nil)
+var _ domain.NotificationProducer = (*notificationProducer)(nil)
 
 // NewNotificationProducer creates a new producer that publishes to the notification exchange.
-func NewNotificationProducer(ch *amqp.Channel) NotificationProducer {
+func NewNotificationProducer(ch *amqp.Channel) domain.NotificationProducer {
 	return &notificationProducer{channel: ch}
 }
 
@@ -61,7 +57,7 @@ func (c amqpHeaderCarrier) Keys() []string {
 
 // Publish marshals a notification to JSON and publishes it to the notification exchange
 // with the channel as routing key.
-func (p *notificationProducer) Publish(ctx context.Context, n *Notification) error {
+func (p *notificationProducer) Publish(ctx context.Context, n *domain.Notification) error {
 	ctx, span := otel.Tracer("notification").Start(ctx, "producer.Publish")
 	defer span.End()
 
@@ -112,7 +108,7 @@ func (p *notificationProducer) Publish(ctx context.Context, n *Notification) err
 
 // PublishBatch publishes multiple notifications. It stops and returns the error
 // if any individual publish fails.
-func (p *notificationProducer) PublishBatch(ctx context.Context, notifications []*Notification) error {
+func (p *notificationProducer) PublishBatch(ctx context.Context, notifications []*domain.Notification) error {
 	for _, n := range notifications {
 		if err := p.Publish(ctx, n); err != nil {
 			return err

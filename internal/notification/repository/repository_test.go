@@ -1,4 +1,4 @@
-package notification
+package repository
 
 import (
 	"testing"
@@ -6,11 +6,13 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/baris/notification-hub/internal/notification/domain"
 )
 
 func TestRepositoryInterfaceCompliance(t *testing.T) {
 	// Compile-time check: repository implements NotificationRepository
-	var _ NotificationRepository = (*repository)(nil)
+	var _ domain.NotificationRepository = (*repository)(nil)
 }
 
 func TestIsUniqueViolation(t *testing.T) {
@@ -30,13 +32,13 @@ func TestToResponse_MapsAllFields(t *testing.T) {
 	providerID := "provider-123"
 	failReason := "timeout"
 
-	n := &Notification{
+	n := &domain.Notification{
 		ID:            uuid.New(),
 		Recipient:     "+905551234567",
-		Channel:       NotificationChannelSMS,
+		Channel:       domain.NotificationChannelSMS,
 		Content:       "Hello",
-		Priority:      NotificationPriorityHigh,
-		Status:        NotificationStatusSent,
+		Priority:      domain.NotificationPriorityHigh,
+		Status:        domain.NotificationStatusSent,
 		BatchID:       &batchID,
 		TemplateID:    &templateID,
 		ProviderMsgID: &providerID,
@@ -48,14 +50,14 @@ func TestToResponse_MapsAllFields(t *testing.T) {
 		CreatedAt:     now,
 	}
 
-	resp := ToNotificationResponse(n)
+	resp := domain.ToNotificationResponse(n)
 
 	assert.Equal(t, n.ID, resp.ID)
 	assert.Equal(t, n.Recipient, resp.Recipient)
-	assert.Equal(t, string(NotificationChannelSMS), resp.Channel)
+	assert.Equal(t, string(domain.NotificationChannelSMS), resp.Channel)
 	assert.Equal(t, n.Content, resp.Content)
-	assert.Equal(t, string(NotificationPriorityHigh), resp.Priority)
-	assert.Equal(t, string(NotificationStatusSent), resp.Status)
+	assert.Equal(t, string(domain.NotificationPriorityHigh), resp.Priority)
+	assert.Equal(t, string(domain.NotificationStatusSent), resp.Status)
 	assert.Equal(t, &batchID, resp.BatchID)
 	assert.Equal(t, &templateID, resp.TemplateID)
 	assert.Equal(t, &providerID, resp.ProviderMsgID)
@@ -68,10 +70,10 @@ func TestToResponse_MapsAllFields(t *testing.T) {
 }
 
 func TestToResponseList(t *testing.T) {
-	n1 := &Notification{ID: uuid.New(), Recipient: "a", Channel: NotificationChannelSMS, Status: NotificationStatusPending}
-	n2 := &Notification{ID: uuid.New(), Recipient: "b", Channel: NotificationChannelEmail, Status: NotificationStatusSent}
+	n1 := &domain.Notification{ID: uuid.New(), Recipient: "a", Channel: domain.NotificationChannelSMS, Status: domain.NotificationStatusPending}
+	n2 := &domain.Notification{ID: uuid.New(), Recipient: "b", Channel: domain.NotificationChannelEmail, Status: domain.NotificationStatusSent}
 
-	responses := ToNotificationResponseList([]*Notification{n1, n2})
+	responses := domain.ToNotificationResponseList([]*domain.Notification{n1, n2})
 
 	assert.Len(t, responses, 2)
 	assert.Equal(t, n1.ID, responses[0].ID)
@@ -79,7 +81,7 @@ func TestToResponseList(t *testing.T) {
 }
 
 func TestToResponseList_Empty(t *testing.T) {
-	responses := ToNotificationResponseList([]*Notification{})
+	responses := domain.ToNotificationResponseList([]*domain.Notification{})
 	assert.Empty(t, responses)
 	assert.NotNil(t, responses)
 }

@@ -9,7 +9,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/baris/notification-hub/config"
-	"github.com/baris/notification-hub/internal/notification"
+	"github.com/baris/notification-hub/internal/notification/domain"
 	"github.com/baris/notification-hub/internal/notificationtemplate"
 	"github.com/baris/notification-hub/pkg/postgres"
 )
@@ -33,7 +33,7 @@ func main() {
 	}
 
 	// Clean up existing seed data (soft-deleted or not) to make seeder idempotent.
-	db.Unscoped().Where("recipient LIKE ?", "seed-%").Delete(&notification.Notification{})
+	db.Unscoped().Where("recipient LIKE ?", "seed-%").Delete(&domain.Notification{})
 	db.Unscoped().Where("name LIKE ?", "seed-%").Delete(&notificationtemplate.NotificationTemplate{})
 
 	log.Println("Cleaned up existing seed data")
@@ -85,22 +85,22 @@ func main() {
 	emailVars := json.RawMessage(`{"name":"Alice"}`)
 	pushVars := json.RawMessage(`{"orderId":"ORD-9001","status":"shipped"}`)
 
-	notifications := []notification.Notification{
+	notifications := []domain.Notification{
 		{
 			ID:        uuid.New(),
 			Recipient: "seed-user-1@example.com",
-			Channel:   notification.NotificationChannelEmail,
+			Channel:   domain.NotificationChannelEmail,
 			Content:   "Welcome to our platform, Alice!",
-			Priority:  notification.NotificationPriorityNormal,
-			Status:    notification.NotificationStatusPending,
+			Priority:  domain.NotificationPriorityNormal,
+			Status:    domain.NotificationStatusPending,
 		},
 		{
 			ID:           uuid.New(),
 			Recipient:    "seed-user-2@example.com",
-			Channel:      notification.NotificationChannelEmail,
+			Channel:      domain.NotificationChannelEmail,
 			Content:      "Your account has been verified.",
-			Priority:     notification.NotificationPriorityHigh,
-			Status:       notification.NotificationStatusSent,
+			Priority:     domain.NotificationPriorityHigh,
+			Status:       domain.NotificationStatusSent,
 			SentAt:       &past,
 			ProviderMsgID: &providerMsg,
 			TemplateID:   &emailTemplateID,
@@ -109,10 +109,10 @@ func main() {
 		{
 			ID:            uuid.New(),
 			Recipient:     "seed-+905551234567",
-			Channel:       notification.NotificationChannelSMS,
+			Channel:       domain.NotificationChannelSMS,
 			Content:       "Your verification code is 123456.",
-			Priority:      notification.NotificationPriorityHigh,
-			Status:        notification.NotificationStatusFailed,
+			Priority:      domain.NotificationPriorityHigh,
+			Status:        domain.NotificationStatusFailed,
 			FailedAt:      &past,
 			FailureReason: &failureReason,
 			RetryCount:    3,
@@ -122,65 +122,65 @@ func main() {
 		{
 			ID:        uuid.New(),
 			Recipient: "seed-device-token-abc",
-			Channel:   notification.NotificationChannelPush,
+			Channel:   domain.NotificationChannelPush,
 			Content:   "Your order #ORD-9001 has been shipped.",
-			Priority:  notification.NotificationPriorityNormal,
-			Status:    notification.NotificationStatusQueued,
+			Priority:  domain.NotificationPriorityNormal,
+			Status:    domain.NotificationStatusQueued,
 			TemplateID:   &pushTemplateID,
 			TemplateVars: pushVars,
 		},
 		{
 			ID:        uuid.New(),
 			Recipient: "seed-+905559876543",
-			Channel:   notification.NotificationChannelSMS,
+			Channel:   domain.NotificationChannelSMS,
 			Content:   "Your appointment is confirmed for tomorrow.",
-			Priority:  notification.NotificationPriorityLow,
-			Status:    notification.NotificationStatusScheduled,
+			Priority:  domain.NotificationPriorityLow,
+			Status:    domain.NotificationStatusScheduled,
 			ScheduledAt: &future,
 		},
 		{
 			ID:        uuid.New(),
 			Recipient: "seed-user-3@example.com",
-			Channel:   notification.NotificationChannelEmail,
+			Channel:   domain.NotificationChannelEmail,
 			Content:   "Password reset link: https://example.com/reset/abc",
-			Priority:  notification.NotificationPriorityHigh,
-			Status:    notification.NotificationStatusProcessing,
+			Priority:  domain.NotificationPriorityHigh,
+			Status:    domain.NotificationStatusProcessing,
 		},
 		{
 			ID:             uuid.New(),
 			Recipient:      "seed-device-token-def",
-			Channel:        notification.NotificationChannelPush,
+			Channel:        domain.NotificationChannelPush,
 			Content:        "Flash sale starts now! 50% off everything.",
-			Priority:       notification.NotificationPriorityNormal,
-			Status:         notification.NotificationStatusSent,
+			Priority:       domain.NotificationPriorityNormal,
+			Status:         domain.NotificationStatusSent,
 			SentAt:         &past,
 			IdempotencyKey: &idemKey1,
 		},
 		{
 			ID:            uuid.New(),
 			Recipient:     "seed-+905551112233",
-			Channel:       notification.NotificationChannelSMS,
+			Channel:       domain.NotificationChannelSMS,
 			Content:       "Your OTP is 789012.",
-			Priority:      notification.NotificationPriorityHigh,
-			Status:        notification.NotificationStatusRetrying,
+			Priority:      domain.NotificationPriorityHigh,
+			Status:        domain.NotificationStatusRetrying,
 			RetryCount:    1,
 			IdempotencyKey: &idemKey2,
 		},
 		{
 			ID:        uuid.New(),
 			Recipient: "seed-user-4@example.com",
-			Channel:   notification.NotificationChannelEmail,
+			Channel:   domain.NotificationChannelEmail,
 			Content:   "Your subscription has been cancelled.",
-			Priority:  notification.NotificationPriorityNormal,
-			Status:    notification.NotificationStatusCancelled,
+			Priority:  domain.NotificationPriorityNormal,
+			Status:    domain.NotificationStatusCancelled,
 		},
 		{
 			ID:        uuid.New(),
 			Recipient: "seed-device-token-ghi",
-			Channel:   notification.NotificationChannelPush,
+			Channel:   domain.NotificationChannelPush,
 			Content:   "New message from John.",
-			Priority:  notification.NotificationPriorityLow,
-			Status:    notification.NotificationStatusPending,
+			Priority:  domain.NotificationPriorityLow,
+			Status:    domain.NotificationStatusPending,
 		},
 	}
 
@@ -193,52 +193,52 @@ func main() {
 
 	batchID := uuid.New()
 
-	batchNotifications := []notification.Notification{
+	batchNotifications := []domain.Notification{
 		{
 			ID:        uuid.New(),
 			Recipient: "seed-batch-user-1@example.com",
-			Channel:   notification.NotificationChannelEmail,
+			Channel:   domain.NotificationChannelEmail,
 			Content:   "Monthly newsletter - March 2026 edition.",
-			Priority:  notification.NotificationPriorityLow,
-			Status:    notification.NotificationStatusSent,
+			Priority:  domain.NotificationPriorityLow,
+			Status:    domain.NotificationStatusSent,
 			BatchID:   &batchID,
 			SentAt:    &past,
 		},
 		{
 			ID:        uuid.New(),
 			Recipient: "seed-batch-user-2@example.com",
-			Channel:   notification.NotificationChannelEmail,
+			Channel:   domain.NotificationChannelEmail,
 			Content:   "Monthly newsletter - March 2026 edition.",
-			Priority:  notification.NotificationPriorityLow,
-			Status:    notification.NotificationStatusSent,
+			Priority:  domain.NotificationPriorityLow,
+			Status:    domain.NotificationStatusSent,
 			BatchID:   &batchID,
 			SentAt:    &past,
 		},
 		{
 			ID:        uuid.New(),
 			Recipient: "seed-batch-user-3@example.com",
-			Channel:   notification.NotificationChannelEmail,
+			Channel:   domain.NotificationChannelEmail,
 			Content:   "Monthly newsletter - March 2026 edition.",
-			Priority:  notification.NotificationPriorityLow,
-			Status:    notification.NotificationStatusPending,
+			Priority:  domain.NotificationPriorityLow,
+			Status:    domain.NotificationStatusPending,
 			BatchID:   &batchID,
 		},
 		{
 			ID:        uuid.New(),
 			Recipient: "seed-batch-user-4@example.com",
-			Channel:   notification.NotificationChannelEmail,
+			Channel:   domain.NotificationChannelEmail,
 			Content:   "Monthly newsletter - March 2026 edition.",
-			Priority:  notification.NotificationPriorityLow,
-			Status:    notification.NotificationStatusPending,
+			Priority:  domain.NotificationPriorityLow,
+			Status:    domain.NotificationStatusPending,
 			BatchID:   &batchID,
 		},
 		{
 			ID:            uuid.New(),
 			Recipient:     "seed-batch-user-5@example.com",
-			Channel:       notification.NotificationChannelEmail,
+			Channel:       domain.NotificationChannelEmail,
 			Content:       "Monthly newsletter - March 2026 edition.",
-			Priority:      notification.NotificationPriorityLow,
-			Status:        notification.NotificationStatusFailed,
+			Priority:      domain.NotificationPriorityLow,
+			Status:        domain.NotificationStatusFailed,
 			BatchID:       &batchID,
 			FailedAt:      &past,
 			FailureReason: &failureReason,

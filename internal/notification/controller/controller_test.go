@@ -1,4 +1,4 @@
-package notification
+package controller
 
 import (
 	"bytes"
@@ -17,6 +17,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
+	"github.com/baris/notification-hub/internal/notification/domain"
 	"github.com/baris/notification-hub/pkg/errs"
 	"github.com/baris/notification-hub/pkg/response"
 )
@@ -27,60 +28,60 @@ type mockNotificationService struct {
 	mock.Mock
 }
 
-func (m *mockNotificationService) Create(ctx context.Context, req NotificationCreateRequest, idempotencyKey *string) (*Notification, error) {
+func (m *mockNotificationService) Create(ctx context.Context, req domain.NotificationCreateRequest, idempotencyKey *string) (*domain.Notification, error) {
 	args := m.Called(ctx, req, idempotencyKey)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
-	return args.Get(0).(*Notification), args.Error(1)
+	return args.Get(0).(*domain.Notification), args.Error(1)
 }
 
-func (m *mockNotificationService) CreateBatch(ctx context.Context, req NotificationBatchCreateRequest) ([]*Notification, uuid.UUID, error) {
+func (m *mockNotificationService) CreateBatch(ctx context.Context, req domain.NotificationBatchCreateRequest) ([]*domain.Notification, uuid.UUID, error) {
 	args := m.Called(ctx, req)
 	if args.Get(0) == nil {
 		return nil, args.Get(1).(uuid.UUID), args.Error(2)
 	}
-	return args.Get(0).([]*Notification), args.Get(1).(uuid.UUID), args.Error(2)
+	return args.Get(0).([]*domain.Notification), args.Get(1).(uuid.UUID), args.Error(2)
 }
 
-func (m *mockNotificationService) GetByID(ctx context.Context, id uuid.UUID) (*Notification, error) {
+func (m *mockNotificationService) GetByID(ctx context.Context, id uuid.UUID) (*domain.Notification, error) {
 	args := m.Called(ctx, id)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
-	return args.Get(0).(*Notification), args.Error(1)
+	return args.Get(0).(*domain.Notification), args.Error(1)
 }
 
-func (m *mockNotificationService) GetByBatchID(ctx context.Context, batchID uuid.UUID) ([]*Notification, error) {
+func (m *mockNotificationService) GetByBatchID(ctx context.Context, batchID uuid.UUID) ([]*domain.Notification, error) {
 	args := m.Called(ctx, batchID)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
-	return args.Get(0).([]*Notification), args.Error(1)
+	return args.Get(0).([]*domain.Notification), args.Error(1)
 }
 
-func (m *mockNotificationService) List(ctx context.Context, filter NotificationListFilter) ([]*Notification, int64, error) {
+func (m *mockNotificationService) List(ctx context.Context, filter domain.NotificationListFilter) ([]*domain.Notification, int64, error) {
 	args := m.Called(ctx, filter)
 	if args.Get(0) == nil {
 		return nil, args.Get(1).(int64), args.Error(2)
 	}
-	return args.Get(0).([]*Notification), args.Get(1).(int64), args.Error(2)
+	return args.Get(0).([]*domain.Notification), args.Get(1).(int64), args.Error(2)
 }
 
-func (m *mockNotificationService) Cancel(ctx context.Context, id uuid.UUID) (*Notification, error) {
+func (m *mockNotificationService) Cancel(ctx context.Context, id uuid.UUID) (*domain.Notification, error) {
 	args := m.Called(ctx, id)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
-	return args.Get(0).(*Notification), args.Error(1)
+	return args.Get(0).(*domain.Notification), args.Error(1)
 }
 
-func (m *mockNotificationService) MarkAsProcessing(ctx context.Context, id uuid.UUID) (*Notification, error) {
+func (m *mockNotificationService) MarkAsProcessing(ctx context.Context, id uuid.UUID) (*domain.Notification, error) {
 	args := m.Called(ctx, id)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
-	return args.Get(0).(*Notification), args.Error(1)
+	return args.Get(0).(*domain.Notification), args.Error(1)
 }
 
 func (m *mockNotificationService) MarkAsSent(ctx context.Context, id uuid.UUID, providerMsgID string) error {
@@ -119,12 +120,12 @@ type mockNotificationProducer struct {
 	mock.Mock
 }
 
-func (m *mockNotificationProducer) Publish(ctx context.Context, n *Notification) error {
+func (m *mockNotificationProducer) Publish(ctx context.Context, n *domain.Notification) error {
 	args := m.Called(ctx, n)
 	return args.Error(0)
 }
 
-func (m *mockNotificationProducer) PublishBatch(ctx context.Context, notifications []*Notification) error {
+func (m *mockNotificationProducer) PublishBatch(ctx context.Context, notifications []*domain.Notification) error {
 	args := m.Called(ctx, notifications)
 	return args.Error(0)
 }
@@ -156,17 +157,17 @@ func TestController_Create_Success(t *testing.T) {
 	notifID := uuid.New()
 	content := "Hello World"
 
-	svc.On("Create", mock.Anything, mock.AnythingOfType("notification.NotificationCreateRequest"), (*string)(nil)).
-		Return(&Notification{
+	svc.On("Create", mock.Anything, mock.AnythingOfType("domain.NotificationCreateRequest"), (*string)(nil)).
+		Return(&domain.Notification{
 			ID:        notifID,
 			Recipient: "+1234567890",
-			Channel:   NotificationChannelSMS,
+			Channel:   domain.NotificationChannelSMS,
 			Content:   content,
-			Priority:  NotificationPriorityNormal,
-			Status:    NotificationStatusPending,
+			Priority:  domain.NotificationPriorityNormal,
+			Status:    domain.NotificationStatusPending,
 		}, nil)
 
-	prod.On("Publish", mock.Anything, mock.AnythingOfType("*notification.Notification")).Return(nil)
+	prod.On("Publish", mock.Anything, mock.AnythingOfType("*domain.Notification")).Return(nil)
 	svc.On("MarkAsQueued", mock.Anything, notifID).Return(nil)
 
 	body := `{"recipient":"+1234567890","channel":"sms","content":"Hello World"}`
@@ -181,7 +182,7 @@ func TestController_Create_Success(t *testing.T) {
 	assert.True(t, apiResp.Success)
 
 	data, _ := json.Marshal(apiResp.Data)
-	var notifResp NotificationResponse
+	var notifResp domain.NotificationResponse
 	err = json.Unmarshal(data, &notifResp)
 	require.NoError(t, err)
 
@@ -200,15 +201,15 @@ func TestController_Create_WithIdempotencyKey(t *testing.T) {
 	notifID := uuid.New()
 	key := "my-unique-key"
 
-	svc.On("Create", mock.Anything, mock.AnythingOfType("notification.NotificationCreateRequest"), &key).
-		Return(&Notification{
+	svc.On("Create", mock.Anything, mock.AnythingOfType("domain.NotificationCreateRequest"), &key).
+		Return(&domain.Notification{
 			ID:       notifID,
-			Status:   NotificationStatusPending,
-			Channel:  NotificationChannelSMS,
-			Priority: NotificationPriorityNormal,
+			Status:   domain.NotificationStatusPending,
+			Channel:  domain.NotificationChannelSMS,
+			Priority: domain.NotificationPriorityNormal,
 		}, nil)
 
-	prod.On("Publish", mock.Anything, mock.AnythingOfType("*notification.Notification")).Return(nil)
+	prod.On("Publish", mock.Anything, mock.AnythingOfType("*domain.Notification")).Return(nil)
 	svc.On("MarkAsQueued", mock.Anything, notifID).Return(nil)
 
 	body := `{"recipient":"+1234567890","channel":"sms","content":"Hello"}`
@@ -232,12 +233,12 @@ func TestController_Create_Scheduled_NoPublish(t *testing.T) {
 	futureTime := time.Now().UTC().Add(24 * time.Hour)
 	notifID := uuid.New()
 
-	svc.On("Create", mock.Anything, mock.AnythingOfType("notification.NotificationCreateRequest"), (*string)(nil)).
-		Return(&Notification{
+	svc.On("Create", mock.Anything, mock.AnythingOfType("domain.NotificationCreateRequest"), (*string)(nil)).
+		Return(&domain.Notification{
 			ID:          notifID,
-			Status:      NotificationStatusScheduled,
-			Channel:     NotificationChannelEmail,
-			Priority:    NotificationPriorityNormal,
+			Status:      domain.NotificationStatusScheduled,
+			Channel:     domain.NotificationChannelEmail,
+			Priority:    domain.NotificationPriorityNormal,
 			ScheduledAt: &futureTime,
 		}, nil)
 
@@ -253,7 +254,7 @@ func TestController_Create_Scheduled_NoPublish(t *testing.T) {
 	assert.True(t, apiResp.Success)
 
 	data, _ := json.Marshal(apiResp.Data)
-	var notifResp NotificationResponse
+	var notifResp domain.NotificationResponse
 	err = json.Unmarshal(data, &notifResp)
 	require.NoError(t, err)
 	assert.Equal(t, "scheduled", notifResp.Status)
@@ -306,8 +307,8 @@ func TestController_Create_DuplicateIdempotencyKey(t *testing.T) {
 	app := setupTestApp(svc, prod)
 
 	key := "duplicate-key"
-	svc.On("Create", mock.Anything, mock.AnythingOfType("notification.NotificationCreateRequest"), &key).
-		Return(nil, ErrNotificationDuplicateIdempotencyKey)
+	svc.On("Create", mock.Anything, mock.AnythingOfType("domain.NotificationCreateRequest"), &key).
+		Return(nil, domain.ErrNotificationDuplicateIdempotencyKey)
 
 	body := `{"recipient":"+1234567890","channel":"sms","content":"Hello"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/notifications", bytes.NewBufferString(body))
@@ -331,15 +332,15 @@ func TestController_Create_PublishFails_StillReturns201(t *testing.T) {
 	app := setupTestApp(svc, prod)
 
 	notifID := uuid.New()
-	svc.On("Create", mock.Anything, mock.AnythingOfType("notification.NotificationCreateRequest"), (*string)(nil)).
-		Return(&Notification{
+	svc.On("Create", mock.Anything, mock.AnythingOfType("domain.NotificationCreateRequest"), (*string)(nil)).
+		Return(&domain.Notification{
 			ID:       notifID,
-			Status:   NotificationStatusPending,
-			Channel:  NotificationChannelSMS,
-			Priority: NotificationPriorityNormal,
+			Status:   domain.NotificationStatusPending,
+			Channel:  domain.NotificationChannelSMS,
+			Priority: domain.NotificationPriorityNormal,
 		}, nil)
 
-	prod.On("Publish", mock.Anything, mock.AnythingOfType("*notification.Notification")).
+	prod.On("Publish", mock.Anything, mock.AnythingOfType("*domain.Notification")).
 		Return(fmt.Errorf("rabbitmq connection lost"))
 
 	body := `{"recipient":"+1234567890","channel":"sms","content":"Hello"}`
@@ -355,7 +356,7 @@ func TestController_Create_PublishFails_StillReturns201(t *testing.T) {
 
 	// Status remains pending when publish fails.
 	data, _ := json.Marshal(apiResp.Data)
-	var notifResp NotificationResponse
+	var notifResp domain.NotificationResponse
 	err = json.Unmarshal(data, &notifResp)
 	require.NoError(t, err)
 	assert.Equal(t, "pending", notifResp.Status)
@@ -376,15 +377,15 @@ func TestController_CreateBatch_Success(t *testing.T) {
 	notifID1 := uuid.New()
 	notifID2 := uuid.New()
 
-	notifications := []*Notification{
-		{ID: notifID1, Status: NotificationStatusPending, Channel: NotificationChannelSMS, Priority: NotificationPriorityNormal, BatchID: &batchID},
-		{ID: notifID2, Status: NotificationStatusPending, Channel: NotificationChannelSMS, Priority: NotificationPriorityNormal, BatchID: &batchID},
+	notifications := []*domain.Notification{
+		{ID: notifID1, Status: domain.NotificationStatusPending, Channel: domain.NotificationChannelSMS, Priority: domain.NotificationPriorityNormal, BatchID: &batchID},
+		{ID: notifID2, Status: domain.NotificationStatusPending, Channel: domain.NotificationChannelSMS, Priority: domain.NotificationPriorityNormal, BatchID: &batchID},
 	}
 
-	svc.On("CreateBatch", mock.Anything, mock.AnythingOfType("notification.NotificationBatchCreateRequest")).
+	svc.On("CreateBatch", mock.Anything, mock.AnythingOfType("domain.NotificationBatchCreateRequest")).
 		Return(notifications, batchID, nil)
 
-	prod.On("PublishBatch", mock.Anything, mock.AnythingOfType("[]*notification.Notification")).Return(nil)
+	prod.On("PublishBatch", mock.Anything, mock.AnythingOfType("[]*domain.Notification")).Return(nil)
 	svc.On("MarkAsQueued", mock.Anything, notifID1).Return(nil)
 	svc.On("MarkAsQueued", mock.Anything, notifID2).Return(nil)
 
@@ -445,16 +446,16 @@ func TestController_CreateBatch_MixedScheduledAndPending(t *testing.T) {
 	notifID2 := uuid.New()
 	futureTime := time.Now().UTC().Add(24 * time.Hour)
 
-	notifications := []*Notification{
-		{ID: notifID1, Status: NotificationStatusPending, Channel: NotificationChannelSMS, Priority: NotificationPriorityNormal, BatchID: &batchID},
-		{ID: notifID2, Status: NotificationStatusScheduled, Channel: NotificationChannelSMS, Priority: NotificationPriorityNormal, BatchID: &batchID, ScheduledAt: &futureTime},
+	notifications := []*domain.Notification{
+		{ID: notifID1, Status: domain.NotificationStatusPending, Channel: domain.NotificationChannelSMS, Priority: domain.NotificationPriorityNormal, BatchID: &batchID},
+		{ID: notifID2, Status: domain.NotificationStatusScheduled, Channel: domain.NotificationChannelSMS, Priority: domain.NotificationPriorityNormal, BatchID: &batchID, ScheduledAt: &futureTime},
 	}
 
-	svc.On("CreateBatch", mock.Anything, mock.AnythingOfType("notification.NotificationBatchCreateRequest")).
+	svc.On("CreateBatch", mock.Anything, mock.AnythingOfType("domain.NotificationBatchCreateRequest")).
 		Return(notifications, batchID, nil)
 
 	// Only the non-scheduled notification should be published.
-	prod.On("PublishBatch", mock.Anything, mock.MatchedBy(func(ns []*Notification) bool {
+	prod.On("PublishBatch", mock.Anything, mock.MatchedBy(func(ns []*domain.Notification) bool {
 		return len(ns) == 1 && ns[0].ID == notifID1
 	})).Return(nil)
 	svc.On("MarkAsQueued", mock.Anything, notifID1).Return(nil)
@@ -480,12 +481,12 @@ func TestController_GetByID_Success(t *testing.T) {
 	app := setupTestApp(svc, prod)
 
 	notifID := uuid.New()
-	svc.On("GetByID", mock.Anything, notifID).Return(&Notification{
+	svc.On("GetByID", mock.Anything, notifID).Return(&domain.Notification{
 		ID:        notifID,
 		Recipient: "+1234567890",
-		Channel:   NotificationChannelSMS,
-		Status:    NotificationStatusPending,
-		Priority:  NotificationPriorityNormal,
+		Channel:   domain.NotificationChannelSMS,
+		Status:    domain.NotificationStatusPending,
+		Priority:  domain.NotificationPriorityNormal,
 	}, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/notifications/"+notifID.String(), nil)
@@ -522,7 +523,7 @@ func TestController_GetByID_NotFound(t *testing.T) {
 	app := setupTestApp(svc, prod)
 
 	notifID := uuid.New()
-	svc.On("GetByID", mock.Anything, notifID).Return(nil, ErrNotificationNotFound)
+	svc.On("GetByID", mock.Anything, notifID).Return(nil, domain.ErrNotificationNotFound)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/notifications/"+notifID.String(), nil)
 
@@ -566,9 +567,9 @@ func TestController_GetByBatchID_Success(t *testing.T) {
 	app := setupTestApp(svc, prod)
 
 	batchID := uuid.New()
-	notifications := []*Notification{
-		{ID: uuid.New(), BatchID: &batchID, Channel: NotificationChannelSMS, Status: NotificationStatusPending, Priority: NotificationPriorityNormal},
-		{ID: uuid.New(), BatchID: &batchID, Channel: NotificationChannelSMS, Status: NotificationStatusPending, Priority: NotificationPriorityNormal},
+	notifications := []*domain.Notification{
+		{ID: uuid.New(), BatchID: &batchID, Channel: domain.NotificationChannelSMS, Status: domain.NotificationStatusPending, Priority: domain.NotificationPriorityNormal},
+		{ID: uuid.New(), BatchID: &batchID, Channel: domain.NotificationChannelSMS, Status: domain.NotificationStatusPending, Priority: domain.NotificationPriorityNormal},
 	}
 
 	svc.On("GetByBatchID", mock.Anything, batchID).Return(notifications, nil)
@@ -608,13 +609,13 @@ func TestController_List_Success(t *testing.T) {
 	prod := new(mockNotificationProducer)
 	app := setupTestApp(svc, prod)
 
-	expectedFilter := NotificationListFilter{
+	expectedFilter := domain.NotificationListFilter{
 		Limit:  20,
 		Offset: 0,
 	}
 
-	notifications := []*Notification{
-		{ID: uuid.New(), Channel: NotificationChannelSMS, Status: NotificationStatusPending, Priority: NotificationPriorityNormal},
+	notifications := []*domain.Notification{
+		{ID: uuid.New(), Channel: domain.NotificationChannelSMS, Status: domain.NotificationStatusPending, Priority: domain.NotificationPriorityNormal},
 	}
 
 	svc.On("List", mock.Anything, expectedFilter).Return(notifications, int64(1), nil)
@@ -636,14 +637,14 @@ func TestController_List_WithFilters(t *testing.T) {
 	prod := new(mockNotificationProducer)
 	app := setupTestApp(svc, prod)
 
-	expectedFilter := NotificationListFilter{
+	expectedFilter := domain.NotificationListFilter{
 		Status:  "pending",
 		Channel: "sms",
 		Limit:   10,
 		Offset:  5,
 	}
 
-	svc.On("List", mock.Anything, expectedFilter).Return([]*Notification{}, int64(0), nil)
+	svc.On("List", mock.Anything, expectedFilter).Return([]*domain.Notification{}, int64(0), nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/notifications?status=pending&channel=sms&limit=10&offset=5", nil)
 
@@ -662,14 +663,14 @@ func TestController_List_WithDateFilters(t *testing.T) {
 	startDate, _ := time.Parse(time.RFC3339, "2026-01-01T00:00:00Z")
 	endDate, _ := time.Parse(time.RFC3339, "2026-12-31T23:59:59Z")
 
-	expectedFilter := NotificationListFilter{
+	expectedFilter := domain.NotificationListFilter{
 		StartDate: &startDate,
 		EndDate:   &endDate,
 		Limit:     20,
 		Offset:    0,
 	}
 
-	svc.On("List", mock.Anything, expectedFilter).Return([]*Notification{}, int64(0), nil)
+	svc.On("List", mock.Anything, expectedFilter).Return([]*domain.Notification{}, int64(0), nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/notifications?startDate=2026-01-01T00:00:00Z&endDate=2026-12-31T23:59:59Z", nil)
 
@@ -718,12 +719,12 @@ func TestController_List_LimitCapped(t *testing.T) {
 	app := setupTestApp(svc, prod)
 
 	// Limit > 100 should be capped to 100 by Normalize().
-	expectedFilter := NotificationListFilter{
+	expectedFilter := domain.NotificationListFilter{
 		Limit:  100,
 		Offset: 0,
 	}
 
-	svc.On("List", mock.Anything, expectedFilter).Return([]*Notification{}, int64(0), nil)
+	svc.On("List", mock.Anything, expectedFilter).Return([]*domain.Notification{}, int64(0), nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/notifications?limit=500", nil)
 
@@ -742,11 +743,11 @@ func TestController_Cancel_Success(t *testing.T) {
 	app := setupTestApp(svc, prod)
 
 	notifID := uuid.New()
-	svc.On("Cancel", mock.Anything, notifID).Return(&Notification{
+	svc.On("Cancel", mock.Anything, notifID).Return(&domain.Notification{
 		ID:       notifID,
-		Status:   NotificationStatusCancelled,
-		Channel:  NotificationChannelSMS,
-		Priority: NotificationPriorityNormal,
+		Status:   domain.NotificationStatusCancelled,
+		Channel:  domain.NotificationChannelSMS,
+		Priority: domain.NotificationPriorityNormal,
 	}, nil)
 
 	req := httptest.NewRequest(http.MethodPatch, "/api/v1/notifications/"+notifID.String()+"/cancel", nil)
@@ -759,7 +760,7 @@ func TestController_Cancel_Success(t *testing.T) {
 	assert.True(t, apiResp.Success)
 
 	data, _ := json.Marshal(apiResp.Data)
-	var notifResp NotificationResponse
+	var notifResp domain.NotificationResponse
 	err = json.Unmarshal(data, &notifResp)
 	require.NoError(t, err)
 	assert.Equal(t, "cancelled", notifResp.Status)
@@ -789,7 +790,7 @@ func TestController_Cancel_AlreadySent(t *testing.T) {
 	app := setupTestApp(svc, prod)
 
 	notifID := uuid.New()
-	svc.On("Cancel", mock.Anything, notifID).Return(nil, ErrNotificationAlreadySent)
+	svc.On("Cancel", mock.Anything, notifID).Return(nil, domain.ErrNotificationAlreadySent)
 
 	req := httptest.NewRequest(http.MethodPatch, "/api/v1/notifications/"+notifID.String()+"/cancel", nil)
 
@@ -810,7 +811,7 @@ func TestController_Cancel_NotFound(t *testing.T) {
 	app := setupTestApp(svc, prod)
 
 	notifID := uuid.New()
-	svc.On("Cancel", mock.Anything, notifID).Return(nil, ErrNotificationNotFound)
+	svc.On("Cancel", mock.Anything, notifID).Return(nil, domain.ErrNotificationNotFound)
 
 	req := httptest.NewRequest(http.MethodPatch, "/api/v1/notifications/"+notifID.String()+"/cancel", nil)
 
@@ -828,7 +829,7 @@ func TestController_Create_ServiceError(t *testing.T) {
 	prod := new(mockNotificationProducer)
 	app := setupTestApp(svc, prod)
 
-	svc.On("Create", mock.Anything, mock.AnythingOfType("notification.NotificationCreateRequest"), (*string)(nil)).
+	svc.On("Create", mock.Anything, mock.AnythingOfType("domain.NotificationCreateRequest"), (*string)(nil)).
 		Return(nil, errs.NewAppError("TEMPLATE_NOT_FOUND", "template not found", http.StatusNotFound))
 
 	body := `{"recipient":"+1234567890","channel":"sms","templateId":"` + uuid.New().String() + `"}`

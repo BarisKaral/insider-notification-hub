@@ -1,4 +1,4 @@
-package notification
+package service
 
 import (
 	"context"
@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/baris/notification-hub/internal/notification/domain"
 	"github.com/baris/notification-hub/internal/notificationtemplate"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -20,75 +21,75 @@ type mockNotificationRepository struct {
 	mock.Mock
 }
 
-func (m *mockNotificationRepository) Create(ctx context.Context, n *Notification) error {
+func (m *mockNotificationRepository) Create(ctx context.Context, n *domain.Notification) error {
 	args := m.Called(ctx, n)
 	return args.Error(0)
 }
 
-func (m *mockNotificationRepository) CreateBatch(ctx context.Context, notifications []*Notification) error {
+func (m *mockNotificationRepository) CreateBatch(ctx context.Context, notifications []*domain.Notification) error {
 	args := m.Called(ctx, notifications)
 	return args.Error(0)
 }
 
-func (m *mockNotificationRepository) GetByID(ctx context.Context, id uuid.UUID) (*Notification, error) {
+func (m *mockNotificationRepository) GetByID(ctx context.Context, id uuid.UUID) (*domain.Notification, error) {
 	args := m.Called(ctx, id)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
-	return args.Get(0).(*Notification), args.Error(1)
+	return args.Get(0).(*domain.Notification), args.Error(1)
 }
 
-func (m *mockNotificationRepository) GetByBatchID(ctx context.Context, batchID uuid.UUID) ([]*Notification, error) {
+func (m *mockNotificationRepository) GetByBatchID(ctx context.Context, batchID uuid.UUID) ([]*domain.Notification, error) {
 	args := m.Called(ctx, batchID)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
-	return args.Get(0).([]*Notification), args.Error(1)
+	return args.Get(0).([]*domain.Notification), args.Error(1)
 }
 
-func (m *mockNotificationRepository) List(ctx context.Context, filter NotificationListFilter) ([]*Notification, int64, error) {
+func (m *mockNotificationRepository) List(ctx context.Context, filter domain.NotificationListFilter) ([]*domain.Notification, int64, error) {
 	args := m.Called(ctx, filter)
 	if args.Get(0) == nil {
 		return nil, args.Get(1).(int64), args.Error(2)
 	}
-	return args.Get(0).([]*Notification), args.Get(1).(int64), args.Error(2)
+	return args.Get(0).([]*domain.Notification), args.Get(1).(int64), args.Error(2)
 }
 
-func (m *mockNotificationRepository) Update(ctx context.Context, n *Notification) error {
+func (m *mockNotificationRepository) Update(ctx context.Context, n *domain.Notification) error {
 	args := m.Called(ctx, n)
 	return args.Error(0)
 }
 
-func (m *mockNotificationRepository) GetByIdempotencyKey(ctx context.Context, key string) (*Notification, error) {
+func (m *mockNotificationRepository) GetByIdempotencyKey(ctx context.Context, key string) (*domain.Notification, error) {
 	args := m.Called(ctx, key)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
-	return args.Get(0).(*Notification), args.Error(1)
+	return args.Get(0).(*domain.Notification), args.Error(1)
 }
 
-func (m *mockNotificationRepository) GetForProcessing(ctx context.Context, id uuid.UUID) (*Notification, error) {
+func (m *mockNotificationRepository) GetForProcessing(ctx context.Context, id uuid.UUID) (*domain.Notification, error) {
 	args := m.Called(ctx, id)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
-	return args.Get(0).(*Notification), args.Error(1)
+	return args.Get(0).(*domain.Notification), args.Error(1)
 }
 
-func (m *mockNotificationRepository) GetRecoverableNotifications(ctx context.Context, staleDuration time.Duration) ([]*Notification, error) {
+func (m *mockNotificationRepository) GetRecoverableNotifications(ctx context.Context, staleDuration time.Duration) ([]*domain.Notification, error) {
 	args := m.Called(ctx, staleDuration)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
-	return args.Get(0).([]*Notification), args.Error(1)
+	return args.Get(0).([]*domain.Notification), args.Error(1)
 }
 
-func (m *mockNotificationRepository) GetDueScheduledNotifications(ctx context.Context) ([]*Notification, error) {
+func (m *mockNotificationRepository) GetDueScheduledNotifications(ctx context.Context) ([]*domain.Notification, error) {
 	args := m.Called(ctx)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
-	return args.Get(0).([]*Notification), args.Error(1)
+	return args.Get(0).([]*domain.Notification), args.Error(1)
 }
 
 type mockTemplateService struct {
@@ -137,9 +138,23 @@ func (m *mockTemplateService) Render(ctx context.Context, templateID uuid.UUID, 
 	return args.String(0), args.Error(1)
 }
 
+type mockNotificationProducer struct {
+	mock.Mock
+}
+
+func (m *mockNotificationProducer) Publish(ctx context.Context, n *domain.Notification) error {
+	args := m.Called(ctx, n)
+	return args.Error(0)
+}
+
+func (m *mockNotificationProducer) PublishBatch(ctx context.Context, notifications []*domain.Notification) error {
+	args := m.Called(ctx, notifications)
+	return args.Error(0)
+}
+
 // --- Tests ---
 
-func newTestService(repo *mockNotificationRepository, tmplSvc *mockTemplateService, prod *mockNotificationProducer) NotificationService {
+func newTestService(repo *mockNotificationRepository, tmplSvc *mockTemplateService, prod *mockNotificationProducer) domain.NotificationService {
 	return NewNotificationService(repo, tmplSvc, prod)
 }
 
@@ -150,16 +165,16 @@ func TestNotificationService_Create_DirectContent(t *testing.T) {
 	svc := newTestService(repo, tmplSvc, prod)
 
 	content := "Hello World"
-	req := NotificationCreateRequest{
+	req := domain.NotificationCreateRequest{
 		Recipient: "+1234567890",
 		Channel:   "sms",
 		Content:   &content,
 		Priority:  "high",
 	}
 
-	repo.On("Create", mock.Anything, mock.AnythingOfType("*notification.Notification")).
+	repo.On("Create", mock.Anything, mock.AnythingOfType("*domain.Notification")).
 		Run(func(args mock.Arguments) {
-			n := args.Get(1).(*Notification)
+			n := args.Get(1).(*domain.Notification)
 			n.ID = uuid.New()
 		}).
 		Return(nil)
@@ -168,9 +183,9 @@ func TestNotificationService_Create_DirectContent(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, "Hello World", result.Content)
-	assert.Equal(t, NotificationChannelSMS, result.Channel)
-	assert.Equal(t, NotificationPriorityHigh, result.Priority)
-	assert.Equal(t, NotificationStatusPending, result.Status)
+	assert.Equal(t, domain.NotificationChannelSMS, result.Channel)
+	assert.Equal(t, domain.NotificationPriorityHigh, result.Priority)
+	assert.Equal(t, domain.NotificationStatusPending, result.Status)
 	assert.Equal(t, "+1234567890", result.Recipient)
 	assert.NotNil(t, result.IdempotencyKey)
 	repo.AssertExpectations(t)
@@ -184,7 +199,7 @@ func TestNotificationService_Create_WithTemplate(t *testing.T) {
 
 	templateID := uuid.New()
 	variables := map[string]string{"name": "John"}
-	req := NotificationCreateRequest{
+	req := domain.NotificationCreateRequest{
 		Recipient:  "john@example.com",
 		Channel:    "email",
 		TemplateID: &templateID,
@@ -192,7 +207,7 @@ func TestNotificationService_Create_WithTemplate(t *testing.T) {
 	}
 
 	tmplSvc.On("Render", mock.Anything, templateID, variables).Return("Hello John", nil)
-	repo.On("Create", mock.Anything, mock.AnythingOfType("*notification.Notification")).Return(nil)
+	repo.On("Create", mock.Anything, mock.AnythingOfType("*domain.Notification")).Return(nil)
 
 	result, err := svc.Create(context.Background(), req, nil)
 
@@ -218,19 +233,19 @@ func TestNotificationService_Create_DuplicateIdempotencyKey(t *testing.T) {
 
 	content := "Hello"
 	key := "my-unique-key"
-	req := NotificationCreateRequest{
+	req := domain.NotificationCreateRequest{
 		Recipient: "+1234567890",
 		Channel:   "sms",
 		Content:   &content,
 	}
 
-	existing := &Notification{ID: uuid.New()}
+	existing := &domain.Notification{ID: uuid.New()}
 	repo.On("GetByIdempotencyKey", mock.Anything, key).Return(existing, nil)
 
 	result, err := svc.Create(context.Background(), req, &key)
 
 	assert.Nil(t, result)
-	assert.ErrorIs(t, err, ErrNotificationDuplicateIdempotencyKey)
+	assert.ErrorIs(t, err, domain.ErrNotificationDuplicateIdempotencyKey)
 	repo.AssertExpectations(t)
 }
 
@@ -242,19 +257,19 @@ func TestNotificationService_Create_ScheduledAtFuture(t *testing.T) {
 
 	content := "Scheduled message"
 	futureTime := time.Now().UTC().Add(24 * time.Hour)
-	req := NotificationCreateRequest{
+	req := domain.NotificationCreateRequest{
 		Recipient:   "+1234567890",
 		Channel:     "sms",
 		Content:     &content,
 		ScheduledAt: &futureTime,
 	}
 
-	repo.On("Create", mock.Anything, mock.AnythingOfType("*notification.Notification")).Return(nil)
+	repo.On("Create", mock.Anything, mock.AnythingOfType("*domain.Notification")).Return(nil)
 
 	result, err := svc.Create(context.Background(), req, nil)
 
 	require.NoError(t, err)
-	assert.Equal(t, NotificationStatusScheduled, result.Status)
+	assert.Equal(t, domain.NotificationStatusScheduled, result.Status)
 	assert.NotNil(t, result.ScheduledAt)
 	repo.AssertExpectations(t)
 }
@@ -267,14 +282,14 @@ func TestNotificationService_CreateBatch(t *testing.T) {
 
 	content1 := "Hello 1"
 	content2 := "Hello 2"
-	req := NotificationBatchCreateRequest{
-		Notifications: []NotificationCreateRequest{
+	req := domain.NotificationBatchCreateRequest{
+		Notifications: []domain.NotificationCreateRequest{
 			{Recipient: "+111", Channel: "sms", Content: &content1},
 			{Recipient: "+222", Channel: "sms", Content: &content2},
 		},
 	}
 
-	repo.On("CreateBatch", mock.Anything, mock.AnythingOfType("[]*notification.Notification")).Return(nil)
+	repo.On("CreateBatch", mock.Anything, mock.AnythingOfType("[]*domain.Notification")).Return(nil)
 
 	results, batchID, err := svc.CreateBatch(context.Background(), req)
 
@@ -287,7 +302,7 @@ func TestNotificationService_CreateBatch(t *testing.T) {
 		assert.NotNil(t, n.BatchID)
 		assert.Equal(t, batchID, *n.BatchID)
 		assert.NotNil(t, n.IdempotencyKey)
-		assert.Equal(t, NotificationStatusPending, n.Status)
+		assert.Equal(t, domain.NotificationStatusPending, n.Status)
 	}
 
 	assert.Equal(t, "Hello 1", results[0].Content)
@@ -302,18 +317,18 @@ func TestNotificationService_Cancel_FromPending(t *testing.T) {
 	svc := newTestService(repo, tmplSvc, prod)
 
 	id := uuid.New()
-	existing := &Notification{
+	existing := &domain.Notification{
 		ID:     id,
-		Status: NotificationStatusPending,
+		Status: domain.NotificationStatusPending,
 	}
 
 	repo.On("GetByID", mock.Anything, id).Return(existing, nil)
-	repo.On("Update", mock.Anything, mock.AnythingOfType("*notification.Notification")).Return(nil)
+	repo.On("Update", mock.Anything, mock.AnythingOfType("*domain.Notification")).Return(nil)
 
 	result, err := svc.Cancel(context.Background(), id)
 
 	require.NoError(t, err)
-	assert.Equal(t, NotificationStatusCancelled, result.Status)
+	assert.Equal(t, domain.NotificationStatusCancelled, result.Status)
 	repo.AssertExpectations(t)
 }
 
@@ -324,9 +339,9 @@ func TestNotificationService_Cancel_FromSent(t *testing.T) {
 	svc := newTestService(repo, tmplSvc, prod)
 
 	id := uuid.New()
-	existing := &Notification{
+	existing := &domain.Notification{
 		ID:     id,
-		Status: NotificationStatusSent,
+		Status: domain.NotificationStatusSent,
 	}
 
 	repo.On("GetByID", mock.Anything, id).Return(existing, nil)
@@ -334,7 +349,7 @@ func TestNotificationService_Cancel_FromSent(t *testing.T) {
 	result, err := svc.Cancel(context.Background(), id)
 
 	assert.Nil(t, result)
-	assert.ErrorIs(t, err, ErrNotificationAlreadySent)
+	assert.ErrorIs(t, err, domain.ErrNotificationAlreadySent)
 	repo.AssertExpectations(t)
 }
 
@@ -345,9 +360,9 @@ func TestNotificationService_Cancel_FromCancelled(t *testing.T) {
 	svc := newTestService(repo, tmplSvc, prod)
 
 	id := uuid.New()
-	existing := &Notification{
+	existing := &domain.Notification{
 		ID:     id,
-		Status: NotificationStatusCancelled,
+		Status: domain.NotificationStatusCancelled,
 	}
 
 	repo.On("GetByID", mock.Anything, id).Return(existing, nil)
@@ -355,7 +370,7 @@ func TestNotificationService_Cancel_FromCancelled(t *testing.T) {
 	result, err := svc.Cancel(context.Background(), id)
 
 	assert.Nil(t, result)
-	assert.ErrorIs(t, err, ErrNotificationAlreadyCancelled)
+	assert.ErrorIs(t, err, domain.ErrNotificationAlreadyCancelled)
 	repo.AssertExpectations(t)
 }
 
@@ -366,9 +381,9 @@ func TestNotificationService_Cancel_FromProcessing(t *testing.T) {
 	svc := newTestService(repo, tmplSvc, prod)
 
 	id := uuid.New()
-	existing := &Notification{
+	existing := &domain.Notification{
 		ID:     id,
-		Status: NotificationStatusProcessing,
+		Status: domain.NotificationStatusProcessing,
 	}
 
 	repo.On("GetByID", mock.Anything, id).Return(existing, nil)
@@ -376,7 +391,7 @@ func TestNotificationService_Cancel_FromProcessing(t *testing.T) {
 	result, err := svc.Cancel(context.Background(), id)
 
 	assert.Nil(t, result)
-	assert.ErrorIs(t, err, ErrNotificationCancelFailed)
+	assert.ErrorIs(t, err, domain.ErrNotificationCancelFailed)
 	repo.AssertExpectations(t)
 }
 
@@ -387,9 +402,9 @@ func TestNotificationService_MarkAsProcessing_SkipsCancelled(t *testing.T) {
 	svc := newTestService(repo, tmplSvc, prod)
 
 	id := uuid.New()
-	existing := &Notification{
+	existing := &domain.Notification{
 		ID:     id,
-		Status: NotificationStatusCancelled,
+		Status: domain.NotificationStatusCancelled,
 	}
 
 	repo.On("GetForProcessing", mock.Anything, id).Return(existing, nil)
@@ -397,7 +412,7 @@ func TestNotificationService_MarkAsProcessing_SkipsCancelled(t *testing.T) {
 	result, err := svc.MarkAsProcessing(context.Background(), id)
 
 	require.NoError(t, err)
-	assert.Equal(t, NotificationStatusCancelled, result.Status)
+	assert.Equal(t, domain.NotificationStatusCancelled, result.Status)
 	// Update should NOT be called — notification is returned as-is
 	repo.AssertNotCalled(t, "Update", mock.Anything, mock.Anything)
 	repo.AssertExpectations(t)
@@ -410,9 +425,9 @@ func TestNotificationService_MarkAsProcessing_SkipsSent(t *testing.T) {
 	svc := newTestService(repo, tmplSvc, prod)
 
 	id := uuid.New()
-	existing := &Notification{
+	existing := &domain.Notification{
 		ID:     id,
-		Status: NotificationStatusSent,
+		Status: domain.NotificationStatusSent,
 	}
 
 	repo.On("GetForProcessing", mock.Anything, id).Return(existing, nil)
@@ -420,7 +435,7 @@ func TestNotificationService_MarkAsProcessing_SkipsSent(t *testing.T) {
 	result, err := svc.MarkAsProcessing(context.Background(), id)
 
 	require.NoError(t, err)
-	assert.Equal(t, NotificationStatusSent, result.Status)
+	assert.Equal(t, domain.NotificationStatusSent, result.Status)
 	repo.AssertNotCalled(t, "Update", mock.Anything, mock.Anything)
 	repo.AssertExpectations(t)
 }
@@ -432,18 +447,18 @@ func TestNotificationService_MarkAsProcessing_Success(t *testing.T) {
 	svc := newTestService(repo, tmplSvc, prod)
 
 	id := uuid.New()
-	existing := &Notification{
+	existing := &domain.Notification{
 		ID:     id,
-		Status: NotificationStatusQueued,
+		Status: domain.NotificationStatusQueued,
 	}
 
 	repo.On("GetForProcessing", mock.Anything, id).Return(existing, nil)
-	repo.On("Update", mock.Anything, mock.AnythingOfType("*notification.Notification")).Return(nil)
+	repo.On("Update", mock.Anything, mock.AnythingOfType("*domain.Notification")).Return(nil)
 
 	result, err := svc.MarkAsProcessing(context.Background(), id)
 
 	require.NoError(t, err)
-	assert.Equal(t, NotificationStatusProcessing, result.Status)
+	assert.Equal(t, domain.NotificationStatusProcessing, result.Status)
 	repo.AssertExpectations(t)
 }
 
@@ -455,14 +470,14 @@ func TestNotificationService_MarkAsSent(t *testing.T) {
 
 	id := uuid.New()
 	providerMsgID := "provider-123"
-	existing := &Notification{
+	existing := &domain.Notification{
 		ID:     id,
-		Status: NotificationStatusProcessing,
+		Status: domain.NotificationStatusProcessing,
 	}
 
 	repo.On("GetByID", mock.Anything, id).Return(existing, nil)
-	repo.On("Update", mock.Anything, mock.MatchedBy(func(n *Notification) bool {
-		return n.Status == NotificationStatusSent &&
+	repo.On("Update", mock.Anything, mock.MatchedBy(func(n *domain.Notification) bool {
+		return n.Status == domain.NotificationStatusSent &&
 			n.ProviderMsgID != nil && *n.ProviderMsgID == providerMsgID &&
 			n.SentAt != nil
 	})).Return(nil)
@@ -482,14 +497,14 @@ func TestNotificationService_MarkAsFailed(t *testing.T) {
 	id := uuid.New()
 	reason := "provider timeout"
 	retryCount := 3
-	existing := &Notification{
+	existing := &domain.Notification{
 		ID:     id,
-		Status: NotificationStatusProcessing,
+		Status: domain.NotificationStatusProcessing,
 	}
 
 	repo.On("GetByID", mock.Anything, id).Return(existing, nil)
-	repo.On("Update", mock.Anything, mock.MatchedBy(func(n *Notification) bool {
-		return n.Status == NotificationStatusFailed &&
+	repo.On("Update", mock.Anything, mock.MatchedBy(func(n *domain.Notification) bool {
+		return n.Status == domain.NotificationStatusFailed &&
 			n.FailureReason != nil && *n.FailureReason == reason &&
 			n.FailedAt != nil &&
 			n.RetryCount == retryCount
@@ -508,14 +523,14 @@ func TestNotificationService_MarkAsRetrying(t *testing.T) {
 	svc := newTestService(repo, tmplSvc, prod)
 
 	id := uuid.New()
-	existing := &Notification{
+	existing := &domain.Notification{
 		ID:     id,
-		Status: NotificationStatusFailed,
+		Status: domain.NotificationStatusFailed,
 	}
 
 	repo.On("GetByID", mock.Anything, id).Return(existing, nil)
-	repo.On("Update", mock.Anything, mock.MatchedBy(func(n *Notification) bool {
-		return n.Status == NotificationStatusRetrying
+	repo.On("Update", mock.Anything, mock.MatchedBy(func(n *domain.Notification) bool {
+		return n.Status == domain.NotificationStatusRetrying
 	})).Return(nil)
 
 	err := svc.MarkAsRetrying(context.Background(), id)
@@ -531,7 +546,7 @@ func TestNotificationService_GetByID(t *testing.T) {
 	svc := newTestService(repo, tmplSvc, prod)
 
 	id := uuid.New()
-	expected := &Notification{ID: id, Recipient: "test@example.com"}
+	expected := &domain.Notification{ID: id, Recipient: "test@example.com"}
 
 	repo.On("GetByID", mock.Anything, id).Return(expected, nil)
 
@@ -549,7 +564,7 @@ func TestNotificationService_GetByBatchID(t *testing.T) {
 	svc := newTestService(repo, tmplSvc, prod)
 
 	batchID := uuid.New()
-	expected := []*Notification{
+	expected := []*domain.Notification{
 		{ID: uuid.New(), BatchID: &batchID},
 		{ID: uuid.New(), BatchID: &batchID},
 	}
@@ -569,8 +584,8 @@ func TestNotificationService_List(t *testing.T) {
 	prod := new(mockNotificationProducer)
 	svc := newTestService(repo, tmplSvc, prod)
 
-	filter := NotificationListFilter{Limit: 10, Offset: 0}
-	expected := []*Notification{{ID: uuid.New()}}
+	filter := domain.NotificationListFilter{Limit: 10, Offset: 0}
+	expected := []*domain.Notification{{ID: uuid.New()}}
 
 	repo.On("List", mock.Anything, filter).Return(expected, int64(1), nil)
 
@@ -592,19 +607,19 @@ func TestNotificationService_RecoverStuckNotifications_WithStuckNotifications(t 
 
 	id1 := uuid.New()
 	id2 := uuid.New()
-	stuckNotifications := []*Notification{
-		{ID: id1, Status: NotificationStatusPending, Channel: NotificationChannelSMS},
-		{ID: id2, Status: NotificationStatusPending, Channel: NotificationChannelEmail},
+	stuckNotifications := []*domain.Notification{
+		{ID: id1, Status: domain.NotificationStatusPending, Channel: domain.NotificationChannelSMS},
+		{ID: id2, Status: domain.NotificationStatusPending, Channel: domain.NotificationChannelEmail},
 	}
 
 	repo.On("GetRecoverableNotifications", mock.Anything, 30*time.Second).Return(stuckNotifications, nil)
 	prod.On("Publish", mock.Anything, stuckNotifications[0]).Return(nil)
 	prod.On("Publish", mock.Anything, stuckNotifications[1]).Return(nil)
-	repo.On("Update", mock.Anything, mock.MatchedBy(func(n *Notification) bool {
-		return n.ID == id1 && n.Status == NotificationStatusQueued
+	repo.On("Update", mock.Anything, mock.MatchedBy(func(n *domain.Notification) bool {
+		return n.ID == id1 && n.Status == domain.NotificationStatusQueued
 	})).Return(nil)
-	repo.On("Update", mock.Anything, mock.MatchedBy(func(n *Notification) bool {
-		return n.ID == id2 && n.Status == NotificationStatusQueued
+	repo.On("Update", mock.Anything, mock.MatchedBy(func(n *domain.Notification) bool {
+		return n.ID == id2 && n.Status == domain.NotificationStatusQueued
 	})).Return(nil)
 
 	err := svc.RecoverStuckNotifications(context.Background())
@@ -620,7 +635,7 @@ func TestNotificationService_RecoverStuckNotifications_NoStuckNotifications(t *t
 	prod := new(mockNotificationProducer)
 	svc := newTestService(repo, tmplSvc, prod)
 
-	repo.On("GetRecoverableNotifications", mock.Anything, 30*time.Second).Return([]*Notification{}, nil)
+	repo.On("GetRecoverableNotifications", mock.Anything, 30*time.Second).Return([]*domain.Notification{}, nil)
 
 	err := svc.RecoverStuckNotifications(context.Background())
 
@@ -638,24 +653,24 @@ func TestNotificationService_RecoverStuckNotifications_PublishError_ContinuesPro
 
 	id1 := uuid.New()
 	id2 := uuid.New()
-	stuckNotifications := []*Notification{
-		{ID: id1, Status: NotificationStatusPending, Channel: NotificationChannelSMS},
-		{ID: id2, Status: NotificationStatusPending, Channel: NotificationChannelEmail},
+	stuckNotifications := []*domain.Notification{
+		{ID: id1, Status: domain.NotificationStatusPending, Channel: domain.NotificationChannelSMS},
+		{ID: id2, Status: domain.NotificationStatusPending, Channel: domain.NotificationChannelEmail},
 	}
 
 	repo.On("GetRecoverableNotifications", mock.Anything, 30*time.Second).Return(stuckNotifications, nil)
 	// First publish fails, second succeeds.
 	prod.On("Publish", mock.Anything, stuckNotifications[0]).Return(fmt.Errorf("rabbitmq down"))
 	prod.On("Publish", mock.Anything, stuckNotifications[1]).Return(nil)
-	repo.On("Update", mock.Anything, mock.MatchedBy(func(n *Notification) bool {
-		return n.ID == id2 && n.Status == NotificationStatusQueued
+	repo.On("Update", mock.Anything, mock.MatchedBy(func(n *domain.Notification) bool {
+		return n.ID == id2 && n.Status == domain.NotificationStatusQueued
 	})).Return(nil)
 
 	err := svc.RecoverStuckNotifications(context.Background())
 
 	require.NoError(t, err)
 	// Update should only be called for the second notification.
-	repo.AssertNotCalled(t, "Update", mock.Anything, mock.MatchedBy(func(n *Notification) bool {
+	repo.AssertNotCalled(t, "Update", mock.Anything, mock.MatchedBy(func(n *domain.Notification) bool {
 		return n.ID == id1
 	}))
 	repo.AssertExpectations(t)
@@ -688,19 +703,19 @@ func TestNotificationService_PublishDueScheduled_WithDueNotifications(t *testing
 	id1 := uuid.New()
 	id2 := uuid.New()
 	pastTime := time.Now().UTC().Add(-1 * time.Hour)
-	dueNotifications := []*Notification{
-		{ID: id1, Status: NotificationStatusScheduled, Channel: NotificationChannelSMS, ScheduledAt: &pastTime},
-		{ID: id2, Status: NotificationStatusScheduled, Channel: NotificationChannelEmail, ScheduledAt: &pastTime},
+	dueNotifications := []*domain.Notification{
+		{ID: id1, Status: domain.NotificationStatusScheduled, Channel: domain.NotificationChannelSMS, ScheduledAt: &pastTime},
+		{ID: id2, Status: domain.NotificationStatusScheduled, Channel: domain.NotificationChannelEmail, ScheduledAt: &pastTime},
 	}
 
 	repo.On("GetDueScheduledNotifications", mock.Anything).Return(dueNotifications, nil)
 	prod.On("Publish", mock.Anything, dueNotifications[0]).Return(nil)
 	prod.On("Publish", mock.Anything, dueNotifications[1]).Return(nil)
-	repo.On("Update", mock.Anything, mock.MatchedBy(func(n *Notification) bool {
-		return n.ID == id1 && n.Status == NotificationStatusQueued
+	repo.On("Update", mock.Anything, mock.MatchedBy(func(n *domain.Notification) bool {
+		return n.ID == id1 && n.Status == domain.NotificationStatusQueued
 	})).Return(nil)
-	repo.On("Update", mock.Anything, mock.MatchedBy(func(n *Notification) bool {
-		return n.ID == id2 && n.Status == NotificationStatusQueued
+	repo.On("Update", mock.Anything, mock.MatchedBy(func(n *domain.Notification) bool {
+		return n.ID == id2 && n.Status == domain.NotificationStatusQueued
 	})).Return(nil)
 
 	err := svc.PublishDueScheduled(context.Background())
@@ -716,7 +731,7 @@ func TestNotificationService_PublishDueScheduled_NoDueNotifications(t *testing.T
 	prod := new(mockNotificationProducer)
 	svc := newTestService(repo, tmplSvc, prod)
 
-	repo.On("GetDueScheduledNotifications", mock.Anything).Return([]*Notification{}, nil)
+	repo.On("GetDueScheduledNotifications", mock.Anything).Return([]*domain.Notification{}, nil)
 
 	err := svc.PublishDueScheduled(context.Background())
 
@@ -735,17 +750,17 @@ func TestNotificationService_PublishDueScheduled_PublishError_ContinuesProcessin
 	id1 := uuid.New()
 	id2 := uuid.New()
 	pastTime := time.Now().UTC().Add(-1 * time.Hour)
-	dueNotifications := []*Notification{
-		{ID: id1, Status: NotificationStatusScheduled, Channel: NotificationChannelSMS, ScheduledAt: &pastTime},
-		{ID: id2, Status: NotificationStatusScheduled, Channel: NotificationChannelEmail, ScheduledAt: &pastTime},
+	dueNotifications := []*domain.Notification{
+		{ID: id1, Status: domain.NotificationStatusScheduled, Channel: domain.NotificationChannelSMS, ScheduledAt: &pastTime},
+		{ID: id2, Status: domain.NotificationStatusScheduled, Channel: domain.NotificationChannelEmail, ScheduledAt: &pastTime},
 	}
 
 	repo.On("GetDueScheduledNotifications", mock.Anything).Return(dueNotifications, nil)
 	// First publish fails, second succeeds.
 	prod.On("Publish", mock.Anything, dueNotifications[0]).Return(fmt.Errorf("rabbitmq down"))
 	prod.On("Publish", mock.Anything, dueNotifications[1]).Return(nil)
-	repo.On("Update", mock.Anything, mock.MatchedBy(func(n *Notification) bool {
-		return n.ID == id2 && n.Status == NotificationStatusQueued
+	repo.On("Update", mock.Anything, mock.MatchedBy(func(n *domain.Notification) bool {
+		return n.ID == id2 && n.Status == domain.NotificationStatusQueued
 	})).Return(nil)
 
 	err := svc.PublishDueScheduled(context.Background())
