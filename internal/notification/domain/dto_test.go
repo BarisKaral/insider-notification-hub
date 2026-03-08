@@ -27,7 +27,7 @@ func TestDTO_CreateRequest_ValidWithContent(t *testing.T) {
 
 func TestDTO_CreateRequest_ValidWithTemplate(t *testing.T) {
 	req := NotificationCreateRequest{
-		Recipient:  "user@example.com",
+		Recipient:  "+905551234567",
 		Channel:    "sms",
 		TemplateID: uuidPtr(uuid.New()),
 		Variables:  map[string]string{"name": "Baris"},
@@ -237,13 +237,114 @@ func TestDTO_CreateRequest_WithScheduledAt(t *testing.T) {
 	}
 }
 
+// --- Recipient Format Validation Tests ---
+
+func TestDTO_CreateRequest_SMSValidRecipient(t *testing.T) {
+	req := NotificationCreateRequest{
+		Recipient: "+905551234567",
+		Channel:   "sms",
+		Content:   strPtr("Hello"),
+	}
+	if err := req.Validate(); err != nil {
+		t.Fatalf("expected no error for valid phone, got: %v", err)
+	}
+}
+
+func TestDTO_CreateRequest_SMSInvalidRecipient_NoPlus(t *testing.T) {
+	req := NotificationCreateRequest{
+		Recipient: "905551234567",
+		Channel:   "sms",
+		Content:   strPtr("Hello"),
+	}
+	err := req.Validate()
+	if err == nil {
+		t.Fatal("expected error for SMS recipient without + prefix")
+	}
+	if !strings.Contains(err.Error(), "recipient") {
+		t.Fatalf("expected error about recipient, got: %v", err)
+	}
+}
+
+func TestDTO_CreateRequest_SMSInvalidRecipient_Letters(t *testing.T) {
+	req := NotificationCreateRequest{
+		Recipient: "+abcdef",
+		Channel:   "sms",
+		Content:   strPtr("Hello"),
+	}
+	err := req.Validate()
+	if err == nil {
+		t.Fatal("expected error for SMS recipient with letters")
+	}
+}
+
+func TestDTO_CreateRequest_SMSInvalidRecipient_TooShort(t *testing.T) {
+	req := NotificationCreateRequest{
+		Recipient: "+123",
+		Channel:   "sms",
+		Content:   strPtr("Hello"),
+	}
+	err := req.Validate()
+	if err == nil {
+		t.Fatal("expected error for SMS recipient too short")
+	}
+}
+
+func TestDTO_CreateRequest_EmailValidRecipient(t *testing.T) {
+	req := NotificationCreateRequest{
+		Recipient: "user@example.com",
+		Channel:   "email",
+		Content:   strPtr("Hello"),
+	}
+	if err := req.Validate(); err != nil {
+		t.Fatalf("expected no error for valid email, got: %v", err)
+	}
+}
+
+func TestDTO_CreateRequest_EmailInvalidRecipient_NoAt(t *testing.T) {
+	req := NotificationCreateRequest{
+		Recipient: "userexample.com",
+		Channel:   "email",
+		Content:   strPtr("Hello"),
+	}
+	err := req.Validate()
+	if err == nil {
+		t.Fatal("expected error for email without @")
+	}
+	if !strings.Contains(err.Error(), "recipient") {
+		t.Fatalf("expected error about recipient, got: %v", err)
+	}
+}
+
+func TestDTO_CreateRequest_EmailInvalidRecipient_NoDomain(t *testing.T) {
+	req := NotificationCreateRequest{
+		Recipient: "user@",
+		Channel:   "email",
+		Content:   strPtr("Hello"),
+	}
+	err := req.Validate()
+	if err == nil {
+		t.Fatal("expected error for email without domain")
+	}
+}
+
+func TestDTO_CreateRequest_PushValidRecipient(t *testing.T) {
+	req := NotificationCreateRequest{
+		Recipient: "device-token-abc-123",
+		Channel:   "push",
+		Content:   strPtr("Hello"),
+	}
+	if err := req.Validate(); err != nil {
+		t.Fatalf("expected no error for valid push token, got: %v", err)
+	}
+}
+
 // --- NotificationBatchCreateRequest Validation Tests ---
 
 func TestDTO_BatchCreateRequest_Valid(t *testing.T) {
 	req := NotificationBatchCreateRequest{
 		Notifications: []NotificationCreateRequest{
 			{Recipient: "a@b.com", Channel: "email", Content: strPtr("Hello")},
-			{Recipient: "b@b.com", Channel: "sms", Content: strPtr("Hi")},
+			{Recipient: "+905551234567", Channel: "sms", Content: strPtr("Hi")},
 		},
 	}
 	if err := req.Validate(); err != nil {

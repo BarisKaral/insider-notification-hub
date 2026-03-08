@@ -3,6 +3,8 @@ package domain
 import (
 	"fmt"
 	"net/http"
+	"regexp"
+	"strings"
 	"unicode/utf8"
 
 	"github.com/baris/notification-hub/pkg/errs"
@@ -32,6 +34,11 @@ func (r *NotificationCreateRequest) Validate() error {
 	// Struct tag validation.
 	if err := validate.Struct(r); err != nil {
 		return errs.NewAppError("VALIDATION_ERROR", err.Error(), http.StatusBadRequest)
+	}
+
+	// Channel-specific recipient format validation.
+	if err := validateRecipient(r.Channel, r.Recipient); err != nil {
+		return err
 	}
 
 	// Content XOR TemplateID: exactly one must be provided.
@@ -65,6 +72,32 @@ func (r *NotificationCreateRequest) Validate() error {
 		}
 	}
 
+	return nil
+}
+
+// phoneRegex matches E.164 format: + followed by 7-15 digits.
+var phoneRegex = regexp.MustCompile(`^\+[0-9]{7,15}$`)
+
+// validateRecipient checks that the recipient format matches the channel.
+func validateRecipient(channel, recipient string) error {
+	switch NotificationChannel(channel) {
+	case NotificationChannelSMS:
+		if !phoneRegex.MatchString(recipient) {
+			return errs.NewAppError(
+				"VALIDATION_ERROR",
+				"recipient must be a valid phone number in E.164 format (e.g. +905551234567) for sms channel",
+				http.StatusBadRequest,
+			)
+		}
+	case NotificationChannelEmail:
+		if !strings.Contains(recipient, "@") || strings.HasSuffix(recipient, "@") || strings.HasPrefix(recipient, "@") {
+			return errs.NewAppError(
+				"VALIDATION_ERROR",
+				"recipient must be a valid email address for email channel",
+				http.StatusBadRequest,
+			)
+		}
+	}
 	return nil
 }
 
