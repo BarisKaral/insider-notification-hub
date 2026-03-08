@@ -8,11 +8,31 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
 )
+
+// TestMain waits for all services to be ready before running any tests.
+func TestMain(m *testing.M) {
+	deadline := time.Now().Add(30 * time.Second)
+	for time.Now().Before(deadline) {
+		resp, err := makeRequest(http.MethodGet, "/health", nil)
+		if err == nil && resp.StatusCode == http.StatusOK {
+			resp.Body.Close()
+			break
+		}
+		if resp != nil {
+			resp.Body.Close()
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+
+	code := m.Run()
+	os.Exit(code)
+}
 
 const baseURL = "http://localhost:8080"
 
